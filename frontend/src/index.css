@@ -1,60 +1,309 @@
+/* ==========================================================================
+   CLIENTLOCKER DESIGN SYSTEM — LIGHT ENTERPRISE SAAS THEME
+   Visual reference: https://clientlocker-omega.vercel.app/
+   Fonts: Manrope (headings) & DM Sans (body, tables, forms)
+   Palette: Royal Blue #155eef, Slate Navy #10213b, Soft Grey #f7faff, Off-white #ffffff
+   ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap");
 
 :root {
-  font-family: 'DM Sans', sans-serif;
-  color: #10213b;
-  background: #ffffff;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-optical-sizing: auto;
-  scroll-behavior: smooth;
+  /* Surfaces */
+  --bg-app: #ffffff;
+  --bg-subtle: #f8fafc;
+  --bg-muted: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f8fafc;
+  --bg-input: #ffffff;
+  --bg-alt: #f7faff;
+
+  /* Borders */
+  --border-subtle: #eaf0f7;
+  --border-card: #e5ecf7;
+  --border-hover: #d7e5ff;
+  --border-focus: #155eef;
+  --border-medium: #d4deec;
+
+  /* Accent Colors (Royal Blue #155eef) */
+  --accent-primary: #155eef;
+  --accent-primary-hover: #0848cb;
+  --accent-blue-soft: #edf4ff;
+  --accent-blue-tint: #f1f5ff;
+  --accent-emerald: #20b77b;
+  --accent-emerald-dark: #16845c;
+  --accent-emerald-soft: #ecfdf5;
+  --accent-amber: #f59e0b;
+  --accent-amber-soft: #fffbeb;
+  --accent-rose: #ef4444;
+  --accent-rose-soft: #fef2f2;
+
+  /* Typography (Dark Navy / Slate) */
+  --text-main: #10213b;
+  --text-secondary: #334155;
+  --text-muted: #63728a;
+  --text-dim: #718097;
+  --text-inverted: #ffffff;
+
+  /* Typography Families */
+  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-heading: 'Manrope', 'DM Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Emil Kowalski Animation Tokens */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --duration-fast: 150ms;
+  --duration-normal: 220ms;
+  --duration-slow: 320ms;
+
+  /* Radius Tokens */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-full: 9999px;
+
+  /* Soft Light Shadows */
+  --shadow-sm: 0 1px 2px rgba(16, 33, 59, 0.04);
+  --shadow-card: 0 2px 8px rgba(16, 33, 59, 0.04), 0 1px 2px rgba(16, 33, 59, 0.02);
+  --shadow-hover: 0 8px 24px rgba(21, 94, 239, 0.08), 0 2px 6px rgba(16, 33, 59, 0.03);
+  --shadow-popover: 0 14px 35px rgba(16, 33, 59, 0.09), 0 4px 10px rgba(16, 33, 59, 0.04);
+
+  color-scheme: light;
 }
 
-* {
+*, *::before, *::after {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
 }
 
-html {
+html, body {
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   width: 100%;
-  min-width: 320px;
+  min-height: 100vh;
   overflow-x: hidden;
 }
 
-body {
-  width: 100%;
-  min-width: 320px;
-  min-height: 100vh;
-  margin: 0;
-  display: block;
-  background: #ffffff;
-}
-
 #root {
-  width: 100%;
   min-height: 100vh;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  text-align: left;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-app);
 }
 
-button,
-input,
-textarea {
-  font: inherit;
+/* Typography Defaults */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  color: var(--text-main);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h1 { font-size: 32px; line-height: 1.2; }
+h2 { font-size: 24px; line-height: 1.25; }
+h3 { font-size: 18px; line-height: 1.3; }
+h4 { font-size: 15px; line-height: 1.4; }
+
+p {
+  color: var(--text-secondary);
+  line-height: 1.6;
 }
 
 a {
   color: inherit;
   text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-out);
 }
 
-img {
-  max-width: 100%;
-  display: block;
+button {
+  font-family: var(--font-sans);
+  cursor: pointer;
+  border: none;
+  background: none;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+input, select, textarea {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--text-main);
+  background: var(--bg-input);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(21, 94, 239, 0.12);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-dim);
+}
+
+/* Button Component Utilities */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: var(--accent-primary);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(21, 94, 239, 0.25);
+}
+
+.btn-primary:hover {
+  background: var(--accent-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(21, 94, 239, 0.32);
+}
+
+.btn-secondary {
+  background: #ffffff;
+  color: var(--text-main);
+  border-color: var(--border-card);
+  box-shadow: 0 1px 3px rgba(16, 33, 59, 0.04);
+}
+
+.btn-secondary:hover {
+  background: var(--accent-blue-tint);
+  border-color: var(--border-hover);
+  color: var(--accent-primary);
+  transform: translateY(-1px);
+}
+
+.btn-danger {
+  background: var(--accent-rose-soft);
+  color: var(--accent-rose);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.btn-danger:hover {
+  background: var(--accent-rose);
+  color: #ffffff;
+}
+
+/* Status Dots */
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  display: inline-block;
+  background: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.status-dot.emerald {
+  background: var(--accent-emerald);
+  box-shadow: 0 0 6px rgba(32, 183, 123, 0.5);
+}
+
+.status-dot.amber {
+  background: var(--accent-amber);
+}
+
+.status-dot.ruby {
+  background: var(--accent-rose);
+}
+
+/* Editorial & Status Pills */
+.editorial-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--accent-blue-soft);
+  color: var(--accent-primary);
+  border: 1px solid rgba(21, 94, 239, 0.15);
+}
+
+.editorial-tag-emerald {
+  background: var(--accent-emerald-soft);
+  color: var(--accent-emerald-dark);
+  border-color: rgba(32, 183, 123, 0.2);
+}
+
+/* Card Surface Utility */
+.card-surface {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.card-surface:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-hover);
+}
+
+/* Auth Loading State */
+.auth-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 16px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+
+.auth-spinner {
+  width: 38px;
+  height: 38px;
+  border: 3px solid rgba(21, 94, 239, 0.15);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: cl-spin 0.8s linear infinite;
+}
+
+@keyframes cl-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Accessible reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

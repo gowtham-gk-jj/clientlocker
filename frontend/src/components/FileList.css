@@ -1,0 +1,126 @@
+
+.staff-file-list-section {
+  padding: 24px;
+  background: white;
+  border: 1px solid #e7ebf2;
+  border-radius: 15px;
+}
+
+.staff-file-list-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.staff-file-list-heading h2 {
+  margin: 0 0 6px;
+  font-size: 19px;
+  color: #17243a;
+}
+
+.staff-file-list-heading p {
+  margin: 0;
+  color: #718096;
+  font-size: 13px;
+}
+
+.staff-refresh-button {
+  padding: 9px 13px;
+  border: 1px solid #dce4f0;
+  border-radius: 8px;
+  background: white;
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.staff-no-files {
+  padding: 40px 15px;
+  text-align: center;
+  background: #fafcff;
+  border-radius: 10px;
+}
+
+.staff-no-files div {
+  font-size: 35px;
+}
+
+.staff-no-files h3 {
+  margin: 12px 0 6px;
+  color: #25344d;
+}
+
+.staff-no-files p {
+  margin: 0;
+  font-size: 13px;
+  color: #8290a5;
+}
+
+.staff-file-table-wrapper {
+  overflow-x: auto;
+}
+
+.staff-file-table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+.staff-file-table th {
+  padding: 13px;
+  background: #f5f7fb;
+  color: #64748b;
+  font-size: 11px;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.staff-file-table td {
+  padding: 15px 13px;
+  border-bottom: 1px solid #edf0f5;
+  color: #526176;
+  font-size: 12px;
+}
+
+.staff-file-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 220px;
+}
+
+.staff-file-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #25344d;
+}
+
+.staff-file-open-button {
+  padding: 8px 15px;
+  border: none;
+  border-radius: 7px;
+  background: #eaf1ff;
+  color: #2563eb;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.staff-file-open-button:hover:not(:disabled) {
+  background: #dbe8ff;
+}
+
+.staff-file-open-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.staff-file-error {
+  padding: 12px;
+  margin-bottom: 15px;
+  background: #fef3f2;
+  color: #b42318;
+  border-radius: 8px;
+  font-size: 13px;
+}
