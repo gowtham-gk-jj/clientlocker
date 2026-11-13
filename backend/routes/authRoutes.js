@@ -1,32 +1,29 @@
-
 const express = require("express");
 const router = express.Router();
 
+const { login, testLogin } = require("../controllers/authController");
+const { protect } = require("../middleware/authMiddleware");
 const {
-  login,
-  testLogin
-} = require("../controllers/authController");
+  requestMagicLink
+} = require("../controllers/magicLinkController");
+const {
+  verifyMagicLink
+} = require("../controllers/magicLinkVerifyController");
 
 const {
-  protect
-} = require("../middleware/authMiddleware");
-
-// ======================================
-// M2: EMAIL AND PASSWORD LOGIN
-// ======================================
-
+  googleLogin
+} = require("../controllers/googleAuthController");
+// Email and password login
 router.post("/login", login);
-
-// ======================================
-// M2: DEVELOPMENT TEST LOGIN
-// ======================================
-
+router.post("/google", googleLogin);
+// Development-only test login
 router.post("/test-login", testLogin);
 
-// ======================================
-// M2: GET CURRENT LOGGED-IN USER
-// ======================================
+// Client magic-link login
+router.post("/magic-link/request", requestMagicLink);
+router.post("/magic-link/verify", verifyMagicLink);
 
+// Protected endpoint: get currently logged-in user
 router.get("/me", protect, (req, res) => {
   return res.status(200).json({
     success: true,

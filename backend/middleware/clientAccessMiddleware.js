@@ -11,22 +11,16 @@ const ActivityLog = require("../models/ActivityLog");
 
 const logBlockedAccess = async (user, clientId) => {
   try {
-    if (!user || !user._id) return;
-
-    const validClientId =
-      clientId && mongoose.Types.ObjectId.isValid(clientId)
-        ? new mongoose.Types.ObjectId(clientId)
-        : null;
-
     await ActivityLog.create({
       person_id: user._id,
-      client_id: validClientId,
+      client_id: mongoose.Types.ObjectId.isValid(clientId)
+        ? clientId
+        : null,
       action: "ACCESS_BLOCKED",
       blocked: true
     });
   } catch (error) {
-    // Logging failure must not expose protected data.
-    console.error("Blocked access logging error:", error.message);
+    console.error("Blocked access logging error:", error);
   }
 };
 
@@ -48,14 +42,14 @@ const requireClientAccess = async (req, res, next) => {
     }
 
     // 2. Validate client ID
-    if (!clientId || !mongoose.Types.ObjectId.isValid(clientId)) {
+    if (!mongoose.Types.ObjectId.isValid(clientId)) {
       return res.status(400).json({
         success: false,
         message: "Invalid client ID."
       });
     }
 
-    // 3. Find client within the authenticated user's firm
+    // 3. Find client within user's firm
     const client = await Client.findOne({
       _id: clientId,
       firm_id: user.firm_id
@@ -76,31 +70,31 @@ const requireClientAccess = async (req, res, next) => {
       return next();
     }
 
-    // 5. Client access — own records only
+    // 5. Client access
     if (user.role === "client") {
       const ownsClient =
         user.client_id &&
         user.client_id.toString() === client._id.toString();
 
-      if (!ownsClient) {
-        await logBlockedAccess(user, clientId);
-
-        return res.status(403).json({
-          success: false,
-          message: "You can only access your own client records."
-        });
+      if (ownsClient) {
+        req.client = client;
+        return next();
       }
 
-      req.client = client;
-      return next();
+      await logBlockedAccess(user, clientId);
+
+      return res.status(403).json({
+        success: false,
+        message: "You can only access your own client records."
+      });
     }
 
-    // 6. Staff access — assigned clients only
+    // 6. Staff access
     if (user.role === "staff") {
       const assignment = await ClientAccess.findOne({
         person_id: user._id,
         client_id: client._id
-      }).lean();
+      });
 
       if (!assignment) {
         await logBlockedAccess(user, clientId);
@@ -143,8 +137,7 @@ const requireClientAccess = async (req, res, next) => {
 
         return res.status(403).json({
           success: false,
-          message:
-            "Auditors can access only their two permitted assigned clients."
+          message: "Auditors can access only their two permitted assigned clients."
         });
       }
 
