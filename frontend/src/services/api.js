@@ -1,6 +1,7 @@
 
 const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000"
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://clientlocker.onrender.com"
 ).replace(/\/+$/, "");
 
 // ==========================================
@@ -9,7 +10,6 @@ const API_BASE_URL = (
 
 async function apiRequest(endpoint, options = {}) {
   const token = sessionStorage.getItem("token");
-
   const isFormData = options.body instanceof FormData;
 
   const headers = {
@@ -29,7 +29,7 @@ async function apiRequest(endpoint, options = {}) {
     });
   } catch {
     throw new Error(
-      "Unable to connect to ClientLocker server. Please check whether the backend is running."
+      "Unable to connect to ClientLocker server. Please check your internet connection or try again later."
     );
   }
 
@@ -63,7 +63,8 @@ export const loginUser = async (credentials) => {
   });
 };
 
-// DEVELOPMENT-ONLY DEMO LOGIN
+// Development-only demo login.
+// This endpoint must be enabled on the backend.
 export const demoLoginUser = async (credentials) => {
   return apiRequest("/api/auth/test-login", {
     method: "POST",
@@ -74,7 +75,7 @@ export const demoLoginUser = async (credentials) => {
   });
 };
 
-// Google login
+// Google login — requires the Google route on the backend.
 export const googleLoginUser = async (credential) => {
   return apiRequest("/api/auth/google", {
     method: "POST",
@@ -91,6 +92,7 @@ export const getCurrentUser = async () => {
 
 // ==========================================
 // CLIENT MAGIC-LINK APIs
+// Requires magic-link routes on the backend.
 // ==========================================
 
 export const requestMagicLink = async (email) => {
@@ -138,7 +140,6 @@ export const uploadClientFile = async (
   }
 
   const formData = new FormData();
-
   formData.append("file", file);
 
   if (checklistItemId) {
@@ -152,10 +153,11 @@ export const uploadClientFile = async (
 };
 
 // ==========================================
-// TASK 6: SECURE DOWNLOAD LINKS
+// SECURE DOWNLOAD APIs
+// Requires download routes on the backend.
 // ==========================================
 
-// Generate a temporary 10-minute download link.
+// Generate a temporary download link
 export const createDownloadLink = async (fileId) => {
   if (!fileId) {
     throw new Error("File ID is missing.");
@@ -166,11 +168,9 @@ export const createDownloadLink = async (fileId) => {
   });
 };
 
-// Download file through the authenticated backend endpoint.
-// Backend endpoint: GET /api/links/:token
+// Download file through authenticated backend endpoint
 export const downloadClientFile = async (downloadUrl) => {
-  const validDownloadPath =
-    /^\/api\/links\/[a-f\d]{64}$/i;
+  const validDownloadPath = /^\/api\/links\/[a-f\d]{64}$/i;
 
   if (
     typeof downloadUrl !== "string" ||
@@ -214,7 +214,7 @@ export const downloadClientFile = async (downloadUrl) => {
   return response.blob();
 };
 
-// Generate link and retrieve file in one operation.
+// Generate link and retrieve file in one operation
 export const openClientFile = async (fileId) => {
   const linkResponse = await createDownloadLink(fileId);
 
@@ -245,7 +245,6 @@ export const openFileInBrowser = (blob, fileName) => {
   }
 
   const objectUrl = window.URL.createObjectURL(blob);
-
   const downloadElement = document.createElement("a");
 
   downloadElement.href = objectUrl;
@@ -253,7 +252,6 @@ export const openFileInBrowser = (blob, fileName) => {
 
   document.body.appendChild(downloadElement);
   downloadElement.click();
-
   document.body.removeChild(downloadElement);
 
   window.setTimeout(() => {
@@ -263,6 +261,7 @@ export const openFileInBrowser = (blob, fileName) => {
 
 // ==========================================
 // CHECKLIST APIs
+// Requires checklist routes on the backend.
 // ==========================================
 
 export const getClientChecklist = async (clientId) => {
