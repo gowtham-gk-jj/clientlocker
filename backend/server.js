@@ -6,13 +6,13 @@ const dotenv = require("dotenv");
 const helmet = require("helmet");
 const multer = require("multer");
 
-// Load environment variables
+// Load environment variables before importing routes
 dotenv.config();
 
 const app = express();
 
 // ======================================
-// IMPORT M2 ROUTES ONLY
+// IMPORT M2 ROUTES
 // ======================================
 
 const authRoutes = require("./routes/authRoutes");
@@ -28,24 +28,54 @@ const routes = [
 
 for (const [name, route] of routes) {
   if (typeof route !== "function") {
-    throw new Error(
-      `${name} must export a valid Express router.`
-    );
+    throw new Error(`${name} must export a valid Express router.`);
   }
 }
+
+// ======================================
+// CORS CONFIGURATION
+// ======================================
+
+// Supports multiple origins separated by commas in Render.
+const allowedOrigins = (process.env.FRONTEND_URL || "")
+  .split(",")
+  .map((origin) => origin.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
+
+// Add localhost for local development if explicitly enabled.
+if (process.env.ALLOW_LOCAL_FRONTEND === "true") {
+  allowedOrigins.push("http://localhost:5173");
+}
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests without an Origin header.
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      const normalizedOrigin = origin.replace(/\/+$/, "");
+
+      if (allowedOrigins.includes(normalizedOrigin)) {
+        return callback(null, true);
+      }
+
+      console.warn("Blocked CORS origin:", origin);
+      return callback(new Error("Origin not allowed by CORS."));
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+    optionsSuccessStatus: 204
+  })
+);
 
 // ======================================
 // SECURITY MIDDLEWARE
 // ======================================
 
 app.use(helmet());
-
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
-    credentials: true
-  })
-);
 
 // ======================================
 // REQUEST PARSING
@@ -91,30 +121,22 @@ app.get("/api", (req, res) => {
 });
 
 // ======================================
-// AUTHENTICATION ROUTES - M2
+// AUTHENTICATION ROUTES
 // ======================================
 
 app.use("/api/auth", authRoutes);
 
 // ======================================
-// CLIENT ROUTES - M2
+// CLIENT ROUTES
 // ======================================
 
 app.use("/api", clientRoutes);
 
 // ======================================
-// FILE MANAGEMENT ROUTES - M2
+// FILE MANAGEMENT ROUTES
 // ======================================
 
 app.use("/api", fileRoutes);
-
-// Expected M2 endpoints:
-// GET  /api/clients
-// GET  /api/clients/:clientId/files
-// POST /api/clients/:clientId/files
-// GET  /api/files/:id/open
-//
-// Actual paths depend on your route definitions.
 
 // ======================================
 // 404 HANDLER
@@ -140,7 +162,6 @@ app.use((error, req, res, next) => {
 
   // Multer upload errors
   if (error instanceof multer.MulterError) {
-
     if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(413).json({
         success: false,
@@ -165,6 +186,14 @@ app.use((error, req, res, next) => {
     return res.status(400).json({
       success: false,
       message: "File upload failed."
+    });
+  }
+
+  // CORS errors
+  if (error.message === "Origin not allowed by CORS.") {
+    return res.status(403).json({
+      success: false,
+      message: "This frontend origin is not allowed."
     });
   }
 
@@ -197,7 +226,6 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
-
     if (!process.env.MONGO_URI) {
       throw new Error("MONGO_URI is missing.");
     }
@@ -206,19 +234,24 @@ const startServer = async () => {
       throw new Error("JWT_SECRET is missing.");
     }
 
+    if (allowedOrigins.length === 0) {
+      throw new Error("FRONTEND_URL is missing.");
+    }
+
     await mongoose.connect(process.env.MONGO_URI);
 
     console.log("MongoDB Atlas connected successfully");
+    console.log("Allowed frontend origins:", allowedOrigins);
 
     const server = app.listen(PORT, "0.0.0.0", () => {
       console.log("====================================");
-      console.log("CLIENTLOCKER M2 BACKEND STARTED");
+      console.log("CLIENTLOCKER BACKEND STARTED");
       console.log("====================================");
       console.log(`Port: ${PORT}`);
-      console.log(`Health: /api/health`);
-      console.log(`Authentication: /api/auth`);
-      console.log(`Clients: /api/clients`);
-      console.log(`Files: /api/files`);
+      console.log("Health: /api/health");
+      console.log("Authentication: /api/auth");
+      console.log("Clients: /api/clients");
+      console.log("Files: /api/clients/:clientId/files");
       console.log("====================================");
     });
 
