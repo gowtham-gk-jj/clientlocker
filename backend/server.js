@@ -6,34 +6,30 @@ const dotenv = require("dotenv");
 const helmet = require("helmet");
 const multer = require("multer");
 
-// Load environment variables before importing application modules.
+// Load environment variables
 dotenv.config();
 
 const app = express();
 
 // ======================================
-// IMPORT ROUTES
+// IMPORT M2 ROUTES ONLY
 // ======================================
 
 const authRoutes = require("./routes/authRoutes");
-const demoRoutes = require("./routes/demoRoutes");
 const fileRoutes = require("./routes/fileRoutes");
 const clientRoutes = require("./routes/clientRoutes");
-const checklistRoutes = require("./routes/checklistRoutes");
-const accessRoutes = require("./routes/accessRoutes");
-const activityRoutes = require("./routes/activityRoutes");
 
-// Verify route exports before starting the server.
+// Validate route exports
 const routes = [
   ["authRoutes", authRoutes],
-  ["demoRoutes", demoRoutes],
-  ["fileRoutes", fileRoutes]
+  ["fileRoutes", fileRoutes],
+  ["clientRoutes", clientRoutes]
 ];
 
 for (const [name, route] of routes) {
   if (typeof route !== "function") {
     throw new Error(
-      `${name} must export a valid Express router. Check its route file.`
+      `${name} must export a valid Express router.`
     );
   }
 }
@@ -71,7 +67,8 @@ app.use(
 app.get("/api/health", (req, res) => {
   return res.status(200).json({
     success: true,
-    message: "ClientLocker backend is running",
+    project: "ClientLocker",
+    message: "Backend is running",
     database:
       mongoose.connection.readyState === 1
         ? "Connected"
@@ -88,52 +85,37 @@ app.get("/api", (req, res) => {
     success: true,
     project: "ClientLocker",
     message: "Welcome to ClientLocker API",
-    description: "Secure Client File Management System",
-    version: "1.0.0"
+    version: "1.0.0",
+    milestone: "M2"
   });
 });
 
 // ======================================
-// AUTHENTICATION ROUTES
+// AUTHENTICATION ROUTES - M2
 // ======================================
 
 app.use("/api/auth", authRoutes);
 
 // ======================================
-// DEMO ACCOUNT ROUTES
+// CLIENT ROUTES - M2
 // ======================================
 
-app.use("/api/demo", demoRoutes);
+app.use("/api", clientRoutes);
 
 // ======================================
-// CHECKLIST MANAGEMENT ROUTES
-// ======================================
-
-app.use("/api", checklistRoutes);
-
-// ======================================
-// FILE MANAGEMENT ROUTES
+// FILE MANAGEMENT ROUTES - M2
 // ======================================
 
 app.use("/api", fileRoutes);
 
-// Available file endpoints:
+// Expected M2 endpoints:
+// GET  /api/clients
 // GET  /api/clients/:clientId/files
 // POST /api/clients/:clientId/files
 // GET  /api/files/:id/open
-app.use("/api", clientRoutes);
+//
+// Actual paths depend on your route definitions.
 
-// ======================================
-// TASK 7: ACCESS MANAGEMENT
-// ======================================
-
-app.use("/api", accessRoutes);
-
-// ======================================
-// TASK 7: ACTIVITY LOG
-// ======================================
-
-app.use("/api", activityRoutes);
 // ======================================
 // 404 HANDLER
 // ======================================
@@ -156,8 +138,9 @@ app.use((error, req, res, next) => {
     return next(error);
   }
 
-  // Multer file upload errors.
+  // Multer upload errors
   if (error instanceof multer.MulterError) {
+
     if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(413).json({
         success: false,
@@ -181,11 +164,11 @@ app.use((error, req, res, next) => {
 
     return res.status(400).json({
       success: false,
-      message: "File upload failed. Please check the selected file."
+      message: "File upload failed."
     });
   }
 
-  // Other file validation errors.
+  // Client-side validation errors
   if (error.statusCode && error.statusCode < 500) {
     return res.status(error.statusCode).json({
       success: false,
@@ -214,27 +197,28 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
+
     if (!process.env.MONGO_URI) {
-      throw new Error("MONGO_URI is missing in .env file");
+      throw new Error("MONGO_URI is missing.");
     }
 
     if (!process.env.JWT_SECRET) {
-      throw new Error("JWT_SECRET is missing in .env file");
+      throw new Error("JWT_SECRET is missing.");
     }
 
     await mongoose.connect(process.env.MONGO_URI);
 
     console.log("MongoDB Atlas connected successfully");
 
-    const server = app.listen(PORT, () => {
+    const server = app.listen(PORT, "0.0.0.0", () => {
       console.log("====================================");
-      console.log("CLIENTLOCKER BACKEND STARTED");
+      console.log("CLIENTLOCKER M2 BACKEND STARTED");
       console.log("====================================");
-      console.log(`Server: http://localhost:${PORT}`);
-      console.log(`Health: http://localhost:${PORT}/api/health`);
-      console.log(`Auth: http://localhost:${PORT}/api/auth`);
-      console.log(`Demo: http://localhost:${PORT}/api/demo`);
-      console.log(`Files: http://localhost:${PORT}/api`);
+      console.log(`Port: ${PORT}`);
+      console.log(`Health: /api/health`);
+      console.log(`Authentication: /api/auth`);
+      console.log(`Clients: /api/clients`);
+      console.log(`Files: /api/files`);
       console.log("====================================");
     });
 
@@ -248,7 +232,10 @@ const startServer = async () => {
   }
 };
 
-// Start server only when this file is executed directly.
+// ======================================
+// START SERVER
+// ======================================
+
 if (require.main === module) {
   startServer();
 }
