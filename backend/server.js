@@ -6,29 +6,42 @@ const dotenv = require("dotenv");
 const helmet = require("helmet");
 const multer = require("multer");
 
-// Load environment variables before importing routes
+// Load environment variables before importing application modules.
 dotenv.config();
 
 const app = express();
 
 // ======================================
-// IMPORT M2 ROUTES
+// IMPORT ROUTES
 // ======================================
 
 const authRoutes = require("./routes/authRoutes");
+const demoRoutes = require("./routes/demoRoutes");
 const fileRoutes = require("./routes/fileRoutes");
 const clientRoutes = require("./routes/clientRoutes");
+const checklistRoutes = require("./routes/checklistRoutes");
+const accessRoutes = require("./routes/accessRoutes");
+const activityRoutes = require("./routes/activityRoutes");
 
-// Validate route exports
+// ======================================
+// VALIDATE ROUTE EXPORTS
+// ======================================
+
 const routes = [
   ["authRoutes", authRoutes],
+  ["demoRoutes", demoRoutes],
   ["fileRoutes", fileRoutes],
-  ["clientRoutes", clientRoutes]
+  ["clientRoutes", clientRoutes],
+  ["checklistRoutes", checklistRoutes],
+  ["accessRoutes", accessRoutes],
+  ["activityRoutes", activityRoutes]
 ];
 
 for (const [name, route] of routes) {
   if (typeof route !== "function") {
-    throw new Error(`${name} must export a valid Express router.`);
+    throw new Error(
+      `${name} must export a valid Express router. Check its route file.`
+    );
   }
 }
 
@@ -36,21 +49,24 @@ for (const [name, route] of routes) {
 // CORS CONFIGURATION
 // ======================================
 
-// Supports multiple origins separated by commas in Render.
+// Supports multiple frontend URLs separated by commas.
 const allowedOrigins = (process.env.FRONTEND_URL || "")
   .split(",")
   .map((origin) => origin.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
-// Add localhost for local development if explicitly enabled.
+// Allow localhost only when explicitly enabled.
 if (process.env.ALLOW_LOCAL_FRONTEND === "true") {
   allowedOrigins.push("http://localhost:5173");
 }
 
+console.log("Allowed frontend origins:", allowedOrigins);
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests without an Origin header.
+      // Allow requests without an Origin header,
+      // such as direct server-to-server requests.
       if (!origin) {
         return callback(null, true);
       }
@@ -62,10 +78,24 @@ app.use(
       }
 
       console.warn("Blocked CORS origin:", origin);
+
       return callback(new Error("Origin not allowed by CORS."));
     },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS"
+    ],
+
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization"
+    ],
+
     credentials: true,
     optionsSuccessStatus: 204
   })
@@ -115,8 +145,8 @@ app.get("/api", (req, res) => {
     success: true,
     project: "ClientLocker",
     message: "Welcome to ClientLocker API",
-    version: "1.0.0",
-    milestone: "M2"
+    description: "Secure Client File Management System",
+    version: "1.0.0"
   });
 });
 
@@ -127,16 +157,40 @@ app.get("/api", (req, res) => {
 app.use("/api/auth", authRoutes);
 
 // ======================================
-// CLIENT ROUTES
+// DEMO ACCOUNT ROUTES
 // ======================================
 
-app.use("/api", clientRoutes);
+app.use("/api/demo", demoRoutes);
+
+// ======================================
+// CHECKLIST MANAGEMENT ROUTES
+// ======================================
+
+app.use("/api", checklistRoutes);
 
 // ======================================
 // FILE MANAGEMENT ROUTES
 // ======================================
 
 app.use("/api", fileRoutes);
+
+// ======================================
+// CLIENT MANAGEMENT ROUTES
+// ======================================
+
+app.use("/api", clientRoutes);
+
+// ======================================
+// ACCESS MANAGEMENT ROUTES
+// ======================================
+
+app.use("/api", accessRoutes);
+
+// ======================================
+// ACTIVITY LOG ROUTES
+// ======================================
+
+app.use("/api", activityRoutes);
 
 // ======================================
 // 404 HANDLER
@@ -160,7 +214,7 @@ app.use((error, req, res, next) => {
     return next(error);
   }
 
-  // Multer upload errors
+  // Multer upload errors.
   if (error instanceof multer.MulterError) {
     if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(413).json({
@@ -185,11 +239,11 @@ app.use((error, req, res, next) => {
 
     return res.status(400).json({
       success: false,
-      message: "File upload failed."
+      message: "File upload failed. Please check the selected file."
     });
   }
 
-  // CORS errors
+  // CORS errors.
   if (error.message === "Origin not allowed by CORS.") {
     return res.status(403).json({
       success: false,
@@ -197,7 +251,7 @@ app.use((error, req, res, next) => {
     });
   }
 
-  // Client-side validation errors
+  // Client-side validation errors.
   if (error.statusCode && error.statusCode < 500) {
     return res.status(error.statusCode).json({
       success: false,
@@ -241,7 +295,6 @@ const startServer = async () => {
     await mongoose.connect(process.env.MONGO_URI);
 
     console.log("MongoDB Atlas connected successfully");
-    console.log("Allowed frontend origins:", allowedOrigins);
 
     const server = app.listen(PORT, "0.0.0.0", () => {
       console.log("====================================");
@@ -249,9 +302,10 @@ const startServer = async () => {
       console.log("====================================");
       console.log(`Port: ${PORT}`);
       console.log("Health: /api/health");
-      console.log("Authentication: /api/auth");
-      console.log("Clients: /api/clients");
-      console.log("Files: /api/clients/:clientId/files");
+      console.log("Auth: /api/auth");
+      console.log("Demo: /api/demo");
+      console.log("Clients: /api");
+      console.log("Files: /api");
       console.log("====================================");
     });
 
