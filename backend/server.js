@@ -5,8 +5,6 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const helmet = require("helmet");
 const multer = require("multer");
-const fs = require("fs");
-const path = require("path");
 
 // ======================================
 // LOAD ENVIRONMENT VARIABLES
@@ -42,7 +40,7 @@ const routes = [
   ["clientRoutes", clientRoutes],
   ["checklistRoutes", checklistRoutes],
   ["accessRoutes", accessRoutes],
-  ["activityRoutes", activityRoutes]
+  ["activityRoutes", activityRoutes],
 ];
 
 for (const [name, route] of routes) {
@@ -60,10 +58,16 @@ for (const [name, route] of routes) {
 const aiServiceUrl = process.env.AI_SERVICE_URL;
 const aiServiceApiKey = process.env.AI_SERVICE_API_KEY;
 
-if (aiServiceUrl && aiServiceApiKey) {
+const isAIConfigured = Boolean(
+  aiServiceUrl && aiServiceApiKey
+);
+
+if (isAIConfigured) {
   console.log("Remote AI service configured at:", aiServiceUrl);
 } else {
-  console.warn("AI_SERVICE_URL or AI_SERVICE_API_KEY is missing. AI features will be unavailable.");
+  console.warn(
+    "AI_SERVICE_URL or AI_SERVICE_API_KEY is missing. AI features will be unavailable."
+  );
 }
 
 // ======================================
@@ -109,16 +113,16 @@ app.use(
       "PUT",
       "PATCH",
       "DELETE",
-      "OPTIONS"
+      "OPTIONS",
     ],
 
     allowedHeaders: [
       "Content-Type",
-      "Authorization"
+      "Authorization",
     ],
 
     credentials: true,
-    optionsSuccessStatus: 204
+    optionsSuccessStatus: 204,
   })
 );
 
@@ -137,12 +141,12 @@ app.use(express.json({ limit: "1mb" }));
 app.use(
   express.urlencoded({
     extended: true,
-    limit: "1mb"
+    limit: "1mb",
   })
 );
 
 // ======================================
-// HEALTH CHECK
+// GENERAL HEALTH CHECK
 // ======================================
 
 app.get("/api/health", (req, res) => {
@@ -156,19 +160,44 @@ app.get("/api/health", (req, res) => {
         ? "Connected"
         : "Disconnected",
 
-    ai: pythonConfigured
+    ai: isAIConfigured
       ? "Configured"
-      : "Not configured"
+      : "Not configured",
   });
 });
 
 // ======================================
-// AI SERVICE HEALTH CHECK
+// REMOTE AI SERVICE HEALTH CHECK
 // ======================================
 
 app.get("/api/ai/health", async (req, res) => {
-  const health = await aiService.checkHealth();
-  return res.status(health.success ? 200 : 503).json(health);
+  try {
+    if (!isAIConfigured) {
+      return res.status(503).json({
+        success: false,
+        ai: "Not configured",
+        message: "Remote AI service configuration is missing.",
+      });
+    }
+
+    const health = await aiService.checkHealth();
+
+    return res
+      .status(health.success ? 200 : 503)
+      .json(health);
+
+  } catch (error) {
+    console.error(
+      "Remote AI health check failed:",
+      error.code || "AI_HEALTH_CHECK_ERROR"
+    );
+
+    return res.status(503).json({
+      success: false,
+      ai: "Disconnected",
+      message: "Remote AI service is currently unavailable.",
+    });
+  }
 });
 
 // ======================================
@@ -181,7 +210,7 @@ app.get("/api", (req, res) => {
     project: "ClientLocker",
     message: "Welcome to ClientLocker API",
     description: "Secure Client File Management System",
-    version: "1.0.0"
+    version: "1.0.0",
   });
 });
 
@@ -234,7 +263,7 @@ app.use("/api", activityRoutes);
 app.use((req, res) => {
   return res.status(404).json({
     success: false,
-    message: "API endpoint not found"
+    message: "API endpoint not found",
   });
 });
 
@@ -243,7 +272,10 @@ app.use((req, res) => {
 // ======================================
 
 app.use((error, req, res, next) => {
-  console.error("API Error:", error);
+  console.error(
+    "API Error:",
+    error.message || "Unknown error"
+  );
 
   if (res.headersSent) {
     return next(error);
@@ -254,27 +286,27 @@ app.use((error, req, res, next) => {
     if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(413).json({
         success: false,
-        message: "File size cannot exceed 4 MB."
+        message: "File size cannot exceed 4 MB.",
       });
     }
 
     if (error.code === "LIMIT_FILE_COUNT") {
       return res.status(400).json({
         success: false,
-        message: "Only one file can be uploaded at a time."
+        message: "Only one file can be uploaded at a time.",
       });
     }
 
     if (error.code === "LIMIT_UNEXPECTED_FILE") {
       return res.status(400).json({
         success: false,
-        message: "Unexpected file field. Use the field name 'file'."
+        message: "Unexpected file field. Use the field name 'file'.",
       });
     }
 
     return res.status(400).json({
       success: false,
-      message: "File upload failed."
+      message: "File upload failed.",
     });
   }
 
@@ -282,7 +314,7 @@ app.use((error, req, res, next) => {
   if (error.message === "Origin not allowed by CORS.") {
     return res.status(403).json({
       success: false,
-      message: "This frontend origin is not allowed."
+      message: "This frontend origin is not allowed.",
     });
   }
 
@@ -290,14 +322,14 @@ app.use((error, req, res, next) => {
   if (error.type === "entity.too.large") {
     return res.status(413).json({
       success: false,
-      message: "Request body exceeds the allowed size."
+      message: "Request body exceeds the allowed size.",
     });
   }
 
   if (error instanceof SyntaxError && error.status === 400) {
     return res.status(400).json({
       success: false,
-      message: "Invalid JSON request body."
+      message: "Invalid JSON request body.",
     });
   }
 
@@ -305,20 +337,20 @@ app.use((error, req, res, next) => {
   if (error.statusCode && error.statusCode < 500) {
     return res.status(error.statusCode).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 
   if (error.status && error.status < 500) {
     return res.status(error.status).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 
   return res.status(500).json({
     success: false,
-    message: "Internal server error"
+    message: "Internal server error",
   });
 });
 
@@ -352,6 +384,7 @@ const startServer = async () => {
       console.log("====================================");
       console.log("CLIENTLOCKER BACKEND STARTED");
       console.log("====================================");
+
       console.log(`Port: ${PORT}`);
       console.log("Health: /api/health");
       console.log("AI Health: /api/ai/health");
@@ -360,25 +393,31 @@ const startServer = async () => {
       console.log("Clients: /api");
       console.log("Files: /api");
       console.log("Checklist: /api");
+
       console.log("====================================");
 
+      // Remote AI status (no local Python dependency)
       console.log(
-        "Python executable:",
-        pythonExecutable
+        "Remote AI service:",
+        isAIConfigured ? "Configured" : "Unavailable"
       );
 
-      console.log(
-        "Python bridge:",
-        pythonConfigured ? "Configured" : "Unavailable"
-      );
+      console.log("====================================");
     });
 
     httpServer.on("error", (error) => {
-      console.error("HTTP server error:", error.message);
+      console.error(
+        "HTTP server error:",
+        error.message
+      );
     });
 
   } catch (error) {
-    console.error("Server startup failed:", error.message);
+    console.error(
+      "Server startup failed:",
+      error.message
+    );
+
     process.exit(1);
   }
 };
@@ -388,14 +427,19 @@ const startServer = async () => {
 // ======================================
 
 const shutdown = async (signal) => {
-  console.log(`${signal} received. Shutting down ClientLocker...`);
+  console.log(
+    `${signal} received. Shutting down ClientLocker...`
+  );
 
   try {
     if (httpServer) {
       await new Promise((resolve, reject) => {
         httpServer.close((error) => {
-          if (error) reject(error);
-          else resolve();
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
         });
       });
     }
@@ -403,10 +447,15 @@ const shutdown = async (signal) => {
     await mongoose.disconnect();
 
     console.log("ClientLocker shutdown completed.");
+
     process.exit(0);
 
   } catch (error) {
-    console.error("Shutdown error:", error.message);
+    console.error(
+      "Shutdown error:",
+      error.message
+    );
+
     process.exit(1);
   }
 };
