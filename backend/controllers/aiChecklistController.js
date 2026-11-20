@@ -1,23 +1,20 @@
-
 const mongoose = require("mongoose");
 const axios = require("axios");
-const fs = require("fs");
-const os = require("os");
 const path = require("path");
-const { Transform } = require("stream");
-const { pipeline } = require("stream/promises");
+const { PDFParse } = require("pdf-parse");
 
 const StoredFile = require("../models/File");
 const Client = require("../models/Client");
 const ChecklistItem = require("../models/ChecklistItem");
 const ChecklistSuggestion = require("../models/ChecklistSuggestion");
 const ActivityLog = require("../models/ActivityLog");
+const ClientAccess = require("../models/ClientAccess");
 
 const {
   generatePrivateDownloadUrl
 } = require("../services/cloudinaryService");
 
-const { runPython } = require("../services/pythonBridge");
+const { suggestChecklist } = require("../services/aiService");
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
 
@@ -34,34 +31,10 @@ async function recordActivity(data) {
 }
 
 // ======================================
-// NORMALIZE PYTHON RESPONSE
+// DOWNLOAD PRIVATE PDF INTO BUFFER
 // ======================================
 
-function normalizeSuggestions(result) {
-  const data = result?.data ?? result?.result ?? result;
-
-  let suggestions =
-    data?.suggestions ??
-    data?.results ??
-    (data?.suggested_item ? [data] : []);
-
-  if (!Array.isArray(suggestions)) {
-    throw new Error("Invalid AI suggestions response.");
-  }
-
-  return suggestions.filter(
-    (item) =>
-      item &&
-      typeof item.suggested_item === "string" &&
-      item.suggested_item.trim()
-  );
-}
-
-// ======================================
-// DOWNLOAD PRIVATE PDF
-// ======================================
-
-async function downloadPrivatePdf(file, destination) {
+async function downloadPrivatePdfBuffer(file) {
   const extension = path.extname(file.name || "").toLowerCase();
 
   if (extension !== ".pdf" || file.file_type !== "PDF") {
@@ -71,41 +44,39 @@ async function downloadPrivatePdf(file, destination) {
   const privateUrl = generatePrivateDownloadUrl(file, 600);
 
   const response = await axios.get(privateUrl, {
-    responseType: "stream",
+    responseType: "arraybuffer",
     timeout: 30000,
     maxRedirects: 0,
     maxContentLength: MAX_FILE_SIZE
   });
 
-  let totalBytes = 0;
+  const buffer = Buffer.from(response.data);
 
-  const sizeLimiter = new Transform({
-    transform(chunk, encoding, callback) {
-      totalBytes += chunk.length;
-
-      if (totalBytes > MAX_FILE_SIZE) {
-        return callback(
-          new Error("PDF exceeds the 4 MB AI processing limit.")
-        );
-      }
-
-      callback(null, chunk);
-    }
-  });
-
-  try {
-    await pipeline(
-      response.data,
-      sizeLimiter,
-      fs.createWriteStream(destination)
-    );
-  } catch (error) {
-    await fs.promises.rm(destination, { force: true });
-    throw error;
+  if (!buffer || buffer.length === 0) {
+    throw new Error("Downloaded PDF is empty.");
   }
 
-  if (totalBytes === 0) {
-    throw new Error("Downloaded PDF is empty.");
+  if (buffer.length > MAX_FILE_SIZE) {
+    throw new Error("Downloaded PDF exceeds 4 MB processing limit.");
+  }
+
+  return buffer;
+}
+
+// ======================================
+// EXTRACT FIRST PAGE TEXT
+// ======================================
+
+async function extractFirstPageText(pdfBuffer) {
+  const parser = new PDFParse({ data: pdfBuffer });
+  try {
+    const result = await parser.getText();
+    const firstPage = (result.pages && result.pages[0] && result.pages[0].text) || result.text || "";
+    return firstPage.trim();
+  } finally {
+    if (typeof parser.destroy === "function") {
+      await parser.destroy().catch(() => {});
+    }
   }
 }
 
@@ -114,8 +85,6 @@ async function downloadPrivatePdf(file, destination) {
 // ======================================
 
 exports.generateChecklistSuggestions = async (req, res, next) => {
-  let tempDirectory;
-
   try {
     const user = req.user;
     const { clientId, fileId } = req.params;
@@ -148,8 +117,6 @@ exports.generateChecklistSuggestions = async (req, res, next) => {
     }
 
     if (user.role === "staff") {
-      const ClientAccess = require("../models/ClientAccess");
-
       const access = await ClientAccess.findOne({
         client_id: clientId,
         person_id: user._id
@@ -195,62 +162,113 @@ exports.generateChecklistSuggestions = async (req, res, next) => {
       });
     }
 
-    tempDirectory = await fs.promises.mkdtemp(
-      path.join(os.tmpdir(), "clientlocker-ai-")
-    );
-
-    const pdfPath = path.join(tempDirectory, "document.pdf");
-
-    await downloadPrivatePdf(file, pdfPath);
-
-    const pythonResult = await runPython(
-      "suggest_checklist_from_document",
-      {
-        file_path: pdfPath,
-        open_checklist_items: checklistItems.map(
-          (item) => item.name
-        )
-      },
-      { timeout: 60000 }
-    );
-
-    if (!pythonResult || pythonResult.success !== true) {
-      throw new Error(
-        pythonResult?.error || "AI checklist generation failed."
-      );
+    // 1. Download private PDF to in-memory buffer
+    let pdfBuffer;
+    try {
+      pdfBuffer = await downloadPrivatePdfBuffer(file);
+    } catch (downloadError) {
+      console.error("PDF download for AI failed:", downloadError.message);
+      return res.status(200).json({
+        success: true,
+        message: "Unable to retrieve document for AI analysis. Please select a checklist item manually.",
+        requires_approval: true,
+        manual_selection_required: true,
+        suggestions: []
+      });
     }
 
-    const suggestions = normalizeSuggestions(pythonResult);
+    // 2. Extract first-page readable text
+    let documentText = "";
+    try {
+      documentText = await extractFirstPageText(pdfBuffer);
+    } catch (extractError) {
+      console.error("PDF text extraction failed:", extractError.message);
+    } finally {
+      pdfBuffer = null; // Free buffer memory immediately
+    }
+
+    if (!documentText) {
+      await recordActivity({
+        person_id: user._id,
+        client_id: clientId,
+        file_id: fileId,
+        action: "AI_DOCUMENT_PROCESSED",
+        blocked: false
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "No readable text found on the first page. Please select a checklist item manually.",
+        requires_approval: true,
+        manual_selection_required: true,
+        suggestions: []
+      });
+    }
+
+    // 3. Request suggestion from remote Standalone-AI microservice
+    let aiResult;
+    try {
+      aiResult = await suggestChecklist({
+        requestId: `req_${Date.now()}_${fileId}`,
+        fileId,
+        clientId,
+        documentText,
+        openChecklistItems: checklistItems
+      });
+    } catch (aiError) {
+      console.error("AI service communication failed:", aiError.message);
+
+      await recordActivity({
+        person_id: user._id,
+        client_id: clientId,
+        file_id: fileId,
+        action: "AI_DOCUMENT_PROCESSED",
+        blocked: false
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "AI suggestion service is temporarily unavailable. Please select a checklist item manually.",
+        requires_approval: true,
+        manual_selection_required: true,
+        suggestions: []
+      });
+    }
+
+    // 4. Map suggestion to pending checklist suggestion
     const savedSuggestions = [];
 
-    for (const suggestion of suggestions) {
-      const suggestedName = suggestion.suggested_item.trim();
+    if (aiResult && aiResult.success && aiResult.suggestion) {
+      const suggestion = aiResult.suggestion;
+      const suggestedName = (suggestion.checklist_item_name || "").trim();
+      const suggestedId = suggestion.checklist_item_id;
 
       const matchedItem = checklistItems.find(
         (item) =>
-          item.name.trim().toLowerCase() ===
-          suggestedName.toLowerCase()
+          (suggestedId && String(item._id) === String(suggestedId)) ||
+          item.name.trim().toLowerCase() === suggestedName.toLowerCase()
       );
 
-      const saved = await ChecklistSuggestion.create({
-        firm_id: user.firm_id,
-        client_id: clientId,
-        file_id: fileId,
-        created_by: user._id,
-        suggested_item: suggestedName,
-        matched_checklist_item_id: matchedItem?._id || null,
-        match_score: Math.max(
-          0,
-          Math.min(100, Number(suggestion.match_score) || 0)
-        ),
-        reason: suggestion.reason || "AI-generated suggestion.",
-        manual_selection_required:
-          suggestion.manual_selection_required === true ||
-          !matchedItem,
-        status: "pending"
-      });
+      if (suggestedName) {
+        const saved = await ChecklistSuggestion.create({
+          firm_id: user.firm_id,
+          client_id: clientId,
+          file_id: fileId,
+          created_by: user._id,
+          suggested_item: suggestedName,
+          matched_checklist_item_id: matchedItem?._id || null,
+          match_score: Math.max(
+            0,
+            Math.min(100, Number(suggestion.score) || 0)
+          ),
+          reason: suggestion.reason || "AI-generated suggestion.",
+          manual_selection_required:
+            aiResult.manual_selection_required === true || !matchedItem,
+          status: "pending"
+        });
 
-      savedSuggestions.push(saved);
+        savedSuggestions.push(saved);
+      }
     }
 
     await recordActivity({
@@ -269,26 +287,24 @@ exports.generateChecklistSuggestions = async (req, res, next) => {
         action: "AI_CHECKLIST_SUGGESTED",
         blocked: false
       });
+
+      return res.status(201).json({
+        success: true,
+        message: "AI checklist suggestions generated. Human approval is required.",
+        requires_approval: true,
+        suggestions: savedSuggestions
+      });
     }
 
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
-      message: "AI checklist suggestions generated. Human approval is required.",
+      message: aiResult.message || "No matching checklist item found. Please select manually.",
       requires_approval: true,
-      suggestions: savedSuggestions
+      manual_selection_required: true,
+      suggestions: []
     });
 
   } catch (error) {
     next(error);
-
-  } finally {
-    if (tempDirectory) {
-      await fs.promises.rm(tempDirectory, {
-        recursive: true,
-        force: true
-      }).catch((error) => {
-        console.error("Temporary AI file cleanup failed:", error.message);
-      });
-    }
   }
 };

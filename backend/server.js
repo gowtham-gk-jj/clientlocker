@@ -28,8 +28,8 @@ const checklistRoutes = require("./routes/checklistRoutes");
 const accessRoutes = require("./routes/accessRoutes");
 const activityRoutes = require("./routes/activityRoutes");
 
-// Python bridge
-const { runPython } = require("./services/pythonBridge");
+// Remote Standalone-AI service
+const aiService = require("./services/aiService");
 
 // ======================================
 // VALIDATE ROUTE EXPORTS
@@ -54,33 +54,16 @@ for (const [name, route] of routes) {
 }
 
 // ======================================
-// PYTHON CONFIGURATION
+// REMOTE AI SERVICE CONFIGURATION
 // ======================================
 
-const pythonProjectDir = process.env.PYTHON_PROJECT_DIR;
-const pythonExecutable = process.env.PYTHON_EXECUTABLE || "python";
+const aiServiceUrl = process.env.AI_SERVICE_URL;
+const aiServiceApiKey = process.env.AI_SERVICE_API_KEY;
 
-let pythonConfigured = false;
-
-if (pythonProjectDir) {
-  const resolvedPythonDir = path.resolve(pythonProjectDir);
-  const pythonBridgePath = path.join(
-    resolvedPythonDir,
-    "bridge.py"
-  );
-
-  pythonConfigured = fs.existsSync(pythonBridgePath);
-
-  if (!pythonConfigured) {
-    console.warn(
-      "Python bridge.py not found:",
-      pythonBridgePath
-    );
-  }
+if (aiServiceUrl && aiServiceApiKey) {
+  console.log("Remote AI service configured at:", aiServiceUrl);
 } else {
-  console.warn(
-    "PYTHON_PROJECT_DIR is missing. AI features will be unavailable."
-  );
+  console.warn("AI_SERVICE_URL or AI_SERVICE_API_KEY is missing. AI features will be unavailable.");
 }
 
 // ======================================
@@ -180,49 +163,12 @@ app.get("/api/health", (req, res) => {
 });
 
 // ======================================
-// AI BRIDGE HEALTH CHECK
+// AI SERVICE HEALTH CHECK
 // ======================================
 
 app.get("/api/ai/health", async (req, res) => {
-  if (!pythonConfigured) {
-    return res.status(503).json({
-      success: false,
-      ai: "Unavailable",
-      message: "Python bridge is not configured."
-    });
-  }
-
-  try {
-    const result = await runPython(
-      "suggest_checklist",
-      {
-        required_documents: [],
-        uploaded_documents: []
-      },
-      { timeout: 30000 }
-    );
-
-    if (!result || result.success !== true) {
-      throw new Error(
-        result?.error || "Python bridge returned an unsuccessful response."
-      );
-    }
-
-    return res.status(200).json({
-      success: true,
-      ai: "Connected",
-      message: "Python AI bridge is responding."
-    });
-
-  } catch (error) {
-    console.error("AI health check failed:", error.message);
-
-    return res.status(503).json({
-      success: false,
-      ai: "Unavailable",
-      message: "Unable to communicate with the Python bridge."
-    });
-  }
+  const health = await aiService.checkHealth();
+  return res.status(health.success ? 200 : 503).json(health);
 });
 
 // ======================================
