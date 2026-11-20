@@ -10,23 +10,24 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 
 import MainLayout from "./components/layout/MainLayout";
 
-// Public pages
 import Home from "./pages/public/Home";
 import About from "./pages/public/About";
-
-// Authentication
 import Login from "./pages/auth/Login";
 
-// Partner pages
-import PartnerDashboard from "./pages/partner/PartnerDashboard";
-import PartnerClients from "./pages/partner/PartnerClients";
+import ClientMagicLogin from "./pages/auth/ClientMagicLogin";
+import MagicLinkVerify from "./pages/auth/MagicLinkVerify";
 
-// Staff pages
 import StaffDashboard from "./pages/staff/StaffDashboard";
 import StaffClientDetails from "./pages/staff/StaffClientDetails";
-import StaffFileUpload from "./pages/staff/StaffFileUpload";
 
-// Client pages
+import PartnerDashboard from "./pages/partner/PartnerDashboard";
+import PartnerClients from "./pages/partner/PartnerClients";
+import PartnerAssignClient from "./pages/partner/PartnerAssignClient";
+import ActivityLog from "./pages/partner/ActivityLog";
+
+import AuditorDashboard from "./pages/auditor/AuditorDashboard";
+import AuditorClientDetails from "./pages/auditor/AuditorClientDetails";
+
 import ClientDashboard from "./pages/client/ClientDashboard";
 
 // ==========================================
@@ -82,7 +83,8 @@ function DashboardRedirect() {
   const roleRoutes = {
     partner: "/partner/dashboard",
     staff: "/staff/dashboard",
-    client: "/client/dashboard"
+    client: "/client/dashboard",
+    auditor: "/auditor/dashboard"
   };
 
   return (
@@ -94,7 +96,7 @@ function DashboardRedirect() {
 }
 
 // ==========================================
-// MAIN APPLICATION ROUTES - M2 ONLY
+// MAIN APPLICATION ROUTES
 // ==========================================
 
 function AppRoutes() {
@@ -103,18 +105,14 @@ function AppRoutes() {
   return (
     <Routes>
 
-      {/* ======================================
-          PUBLIC WEBSITE
-      ====================================== */}
+      {/* PUBLIC WEBSITE */}
 
       <Route element={<MainLayout />}>
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
       </Route>
 
-      {/* ======================================
-          LOGIN
-      ====================================== */}
+      {/* LOGIN ROUTES */}
 
       <Route
         path="/login"
@@ -125,9 +123,23 @@ function AppRoutes() {
         }
       />
 
-      {/* ======================================
-          MAIN DASHBOARD REDIRECT
-      ====================================== */}
+      <Route
+        path="/client/login"
+        element={
+          isAuthenticated
+            ? <DashboardRedirect />
+            : <ClientMagicLogin />
+        }
+      />
+
+      {/* MAGIC LINK VERIFICATION */}
+
+      <Route
+        path="/client/magic-login"
+        element={<MagicLinkVerify />}
+      />
+
+      {/* MAIN DASHBOARD REDIRECT */}
 
       <Route
         path="/dashboard"
@@ -135,7 +147,7 @@ function AppRoutes() {
       />
 
       {/* ======================================
-          PARTNER ROUTES - M2
+          PARTNER ROUTES
       ====================================== */}
 
       <Route
@@ -156,8 +168,28 @@ function AppRoutes() {
         }
       />
 
+      <Route
+        path="/partner/assignments"
+        element={
+          <RoleProtectedRoute allowedRoles={["partner"]}>
+            <PartnerAssignClient />
+          </RoleProtectedRoute>
+        }
+      />
+
+      {/* TASK 7: PARTNER ACTIVITY LOG */}
+
+      <Route
+        path="/partner/activity"
+        element={
+          <RoleProtectedRoute allowedRoles={["partner"]}>
+            <ActivityLog />
+          </RoleProtectedRoute>
+        }
+      />
+
       {/* ======================================
-          STAFF ROUTES - M2
+          STAFF ROUTES
       ====================================== */}
 
       <Route
@@ -181,23 +213,38 @@ function AppRoutes() {
       <Route
         path="/staff/clients/:clientId"
         element={
-          <RoleProtectedRoute allowedRoles={["staff"]}>
+          <RoleProtectedRoute allowedRoles={["partner", "staff"]}>
             <StaffClientDetails />
           </RoleProtectedRoute>
         }
       />
 
+      {/* ======================================
+          AUDITOR ROUTES
+      ====================================== */}
+
       <Route
-        path="/staff/clients/:clientId/upload"
+        path="/auditor/dashboard"
         element={
-          <RoleProtectedRoute allowedRoles={["staff"]}>
-            <StaffFileUpload />
+          <RoleProtectedRoute allowedRoles={["auditor"]}>
+            <AuditorDashboard />
+          </RoleProtectedRoute>
+        }
+      />
+
+      {/* AUDITOR CLIENT DOCUMENTS - READ ONLY */}
+
+      <Route
+        path="/auditor/clients/:clientId"
+        element={
+          <RoleProtectedRoute allowedRoles={["auditor"]}>
+            <AuditorClientDetails />
           </RoleProtectedRoute>
         }
       />
 
       {/* ======================================
-          CLIENT ROUTES - M2
+          CLIENT ROUTES
       ====================================== */}
 
       <Route
@@ -209,9 +256,7 @@ function AppRoutes() {
         }
       />
 
-      {/* ======================================
-          UNKNOWN ROUTES
-      ====================================== */}
+      {/* UNKNOWN ROUTES */}
 
       <Route
         path="*"
@@ -223,7 +268,7 @@ function AppRoutes() {
 }
 
 // ==========================================
-// MAIN APPLICATION
+// MAIN APP
 // ==========================================
 
 function App() {

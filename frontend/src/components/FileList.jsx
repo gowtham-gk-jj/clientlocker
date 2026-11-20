@@ -6,7 +6,9 @@ import "./FileList.css";
 export default function FileList({
   clientId,
   files = [],
-  onRefresh
+  onRefresh,
+  onAnalyze,
+  analyzingId
 }) {
   const [openingId, setOpeningId] = useState(null);
   const [error, setError] = useState("");
@@ -219,7 +221,7 @@ export default function FileList({
 
                     <td>{formatSize(file.file_size)}</td>
 
-                    <td>
+                    <td className="staff-file-actions-cell">
                       <button
                         type="button"
                         className="staff-file-open-button"
@@ -230,6 +232,19 @@ export default function FileList({
                           ? "Opening..."
                           : "Open"}
                       </button>
+                      {onAnalyze && file.file_type === "PDF" && (
+                        <button
+                          type="button"
+                          className="staff-file-ai-button"
+                          onClick={() => onAnalyze(file)}
+                          disabled={analyzingId === fileId}
+                          title="Generate AI checklist suggestions for this PDF"
+                        >
+                          {analyzingId === fileId
+                            ? "Analyzing..."
+                            : "AI Suggest"}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

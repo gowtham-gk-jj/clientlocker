@@ -116,6 +116,32 @@
   cursor: wait;
 }
 
+.staff-file-actions-cell {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.staff-file-ai-button {
+  padding: 8px 14px;
+  border: 1px solid #7c3aed;
+  border-radius: 7px;
+  background: #f5f3ff;
+  color: #7c3aed;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.staff-file-ai-button:hover:not(:disabled) {
+  background: #ede9fe;
+}
+
+.staff-file-ai-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
 .staff-file-error {
   padding: 12px;
   margin-bottom: 15px;

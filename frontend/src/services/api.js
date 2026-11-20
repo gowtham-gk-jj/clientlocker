@@ -290,6 +290,45 @@ export const updateChecklistItem = async (itemId, done) => {
 };
 
 // ==========================================
+// AI CHECKLIST SUGGESTION APIs
+// ==========================================
+
+export const generateChecklistSuggestions = async (clientId, fileId) => {
+  if (!clientId || !fileId) {
+    throw new Error("Client ID and File ID are required.");
+  }
+
+  return apiRequest(`/api/clients/${clientId}/files/${fileId}/ai-checklist-suggestions`, {
+    method: "POST"
+  });
+};
+
+export const getAISuggestions = async (clientId) => {
+  if (!clientId) {
+    throw new Error("Client ID is required.");
+  }
+
+  return apiRequest(`/api/clients/${clientId}/ai-checklist-suggestions`, {
+    method: "GET"
+  });
+};
+
+export const decideAISuggestion = async (suggestionId, status) => {
+  if (!suggestionId) {
+    throw new Error("Suggestion ID is missing.");
+  }
+
+  if (!["accepted", "rejected"].includes(status)) {
+    throw new Error("Status must be accepted or rejected.");
+  }
+
+  return apiRequest(`/api/ai-checklist-suggestions/${suggestionId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status })
+  });
+};
+
+// ==========================================
 // EXPORTS
 // ==========================================
 

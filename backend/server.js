@@ -5,8 +5,13 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const helmet = require("helmet");
 const multer = require("multer");
+const fs = require("fs");
+const path = require("path");
 
-// Load environment variables before importing application modules.
+// ======================================
+// LOAD ENVIRONMENT VARIABLES
+// ======================================
+
 dotenv.config();
 
 const app = express();
@@ -22,6 +27,9 @@ const clientRoutes = require("./routes/clientRoutes");
 const checklistRoutes = require("./routes/checklistRoutes");
 const accessRoutes = require("./routes/accessRoutes");
 const activityRoutes = require("./routes/activityRoutes");
+
+// Python bridge
+const { runPython } = require("./services/pythonBridge");
 
 // ======================================
 // VALIDATE ROUTE EXPORTS
@@ -46,40 +54,70 @@ for (const [name, route] of routes) {
 }
 
 // ======================================
+// PYTHON CONFIGURATION
+// ======================================
+
+const pythonProjectDir = process.env.PYTHON_PROJECT_DIR;
+const pythonExecutable = process.env.PYTHON_EXECUTABLE || "python";
+
+let pythonConfigured = false;
+
+if (pythonProjectDir) {
+  const resolvedPythonDir = path.resolve(pythonProjectDir);
+  const pythonBridgePath = path.join(
+    resolvedPythonDir,
+    "bridge.py"
+  );
+
+  pythonConfigured = fs.existsSync(pythonBridgePath);
+
+  if (!pythonConfigured) {
+    console.warn(
+      "Python bridge.py not found:",
+      pythonBridgePath
+    );
+  }
+} else {
+  console.warn(
+    "PYTHON_PROJECT_DIR is missing. AI features will be unavailable."
+  );
+}
+
+// ======================================
 // CORS CONFIGURATION
 // ======================================
 
-// Supports multiple frontend URLs separated by commas.
 const allowedOrigins = (process.env.FRONTEND_URL || "")
   .split(",")
   .map((origin) => origin.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
-// Allow localhost only when explicitly enabled.
 if (process.env.ALLOW_LOCAL_FRONTEND === "true") {
   allowedOrigins.push("http://localhost:5173");
 }
 
-console.log("Allowed frontend origins:", allowedOrigins);
+const uniqueOrigins = [...new Set(allowedOrigins)];
+
+console.log("Allowed frontend origins:", uniqueOrigins);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests without an Origin header,
-      // such as direct server-to-server requests.
       if (!origin) {
         return callback(null, true);
       }
 
       const normalizedOrigin = origin.replace(/\/+$/, "");
 
-      if (allowedOrigins.includes(normalizedOrigin)) {
+      if (uniqueOrigins.includes(normalizedOrigin)) {
         return callback(null, true);
       }
 
       console.warn("Blocked CORS origin:", origin);
 
-      return callback(new Error("Origin not allowed by CORS."));
+      return callback(
+        new Error("Origin not allowed by CORS.")
+      );
     },
 
     methods: [
@@ -129,11 +167,62 @@ app.get("/api/health", (req, res) => {
     success: true,
     project: "ClientLocker",
     message: "Backend is running",
+
     database:
       mongoose.connection.readyState === 1
         ? "Connected"
-        : "Disconnected"
+        : "Disconnected",
+
+    ai: pythonConfigured
+      ? "Configured"
+      : "Not configured"
   });
+});
+
+// ======================================
+// AI BRIDGE HEALTH CHECK
+// ======================================
+
+app.get("/api/ai/health", async (req, res) => {
+  if (!pythonConfigured) {
+    return res.status(503).json({
+      success: false,
+      ai: "Unavailable",
+      message: "Python bridge is not configured."
+    });
+  }
+
+  try {
+    const result = await runPython(
+      "suggest_checklist",
+      {
+        required_documents: [],
+        uploaded_documents: []
+      },
+      { timeout: 30000 }
+    );
+
+    if (!result || result.success !== true) {
+      throw new Error(
+        result?.error || "Python bridge returned an unsuccessful response."
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      ai: "Connected",
+      message: "Python AI bridge is responding."
+    });
+
+  } catch (error) {
+    console.error("AI health check failed:", error.message);
+
+    return res.status(503).json({
+      success: false,
+      ai: "Unavailable",
+      message: "Unable to communicate with the Python bridge."
+    });
+  }
 });
 
 // ======================================
@@ -163,7 +252,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/demo", demoRoutes);
 
 // ======================================
-// CHECKLIST MANAGEMENT ROUTES
+// CHECKLIST MANAGEMENT + AI ROUTES
 // ======================================
 
 app.use("/api", checklistRoutes);
@@ -214,7 +303,7 @@ app.use((error, req, res, next) => {
     return next(error);
   }
 
-  // Multer upload errors.
+  // Multer errors
   if (error instanceof multer.MulterError) {
     if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(413).json({
@@ -239,11 +328,11 @@ app.use((error, req, res, next) => {
 
     return res.status(400).json({
       success: false,
-      message: "File upload failed. Please check the selected file."
+      message: "File upload failed."
     });
   }
 
-  // CORS errors.
+  // CORS errors
   if (error.message === "Origin not allowed by CORS.") {
     return res.status(403).json({
       success: false,
@@ -251,7 +340,22 @@ app.use((error, req, res, next) => {
     });
   }
 
-  // Client-side validation errors.
+  // Request body parsing errors
+  if (error.type === "entity.too.large") {
+    return res.status(413).json({
+      success: false,
+      message: "Request body exceeds the allowed size."
+    });
+  }
+
+  if (error instanceof SyntaxError && error.status === 400) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid JSON request body."
+    });
+  }
+
+  // Client-side validation errors
   if (error.statusCode && error.statusCode < 500) {
     return res.status(error.statusCode).json({
       success: false,
@@ -278,6 +382,8 @@ app.use((error, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
+let httpServer;
+
 const startServer = async () => {
   try {
     if (!process.env.MONGO_URI) {
@@ -288,7 +394,7 @@ const startServer = async () => {
       throw new Error("JWT_SECRET is missing.");
     }
 
-    if (allowedOrigins.length === 0) {
+    if (uniqueOrigins.length === 0) {
       throw new Error("FRONTEND_URL is missing.");
     }
 
@@ -296,20 +402,32 @@ const startServer = async () => {
 
     console.log("MongoDB Atlas connected successfully");
 
-    const server = app.listen(PORT, "0.0.0.0", () => {
+    httpServer = app.listen(PORT, "0.0.0.0", () => {
       console.log("====================================");
       console.log("CLIENTLOCKER BACKEND STARTED");
       console.log("====================================");
       console.log(`Port: ${PORT}`);
       console.log("Health: /api/health");
+      console.log("AI Health: /api/ai/health");
       console.log("Auth: /api/auth");
       console.log("Demo: /api/demo");
       console.log("Clients: /api");
       console.log("Files: /api");
+      console.log("Checklist: /api");
       console.log("====================================");
+
+      console.log(
+        "Python executable:",
+        pythonExecutable
+      );
+
+      console.log(
+        "Python bridge:",
+        pythonConfigured ? "Configured" : "Unavailable"
+      );
     });
 
-    server.on("error", (error) => {
+    httpServer.on("error", (error) => {
       console.error("HTTP server error:", error.message);
     });
 
@@ -318,6 +436,37 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
+// ======================================
+// GRACEFUL SHUTDOWN
+// ======================================
+
+const shutdown = async (signal) => {
+  console.log(`${signal} received. Shutting down ClientLocker...`);
+
+  try {
+    if (httpServer) {
+      await new Promise((resolve, reject) => {
+        httpServer.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+    }
+
+    await mongoose.disconnect();
+
+    console.log("ClientLocker shutdown completed.");
+    process.exit(0);
+
+  } catch (error) {
+    console.error("Shutdown error:", error.message);
+    process.exit(1);
+  }
+};
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 // ======================================
 // START SERVER
