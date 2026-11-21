@@ -1,15 +1,15 @@
 # ClientLocker – Secure Client Document Management System
 
 <p align="center">
-  <strong>Your Documents. Our Priority.</strong>
+  <strong>Your Documents. Our Priority.</strong>
 </p>
 
 <p align="center">
-  A secure client document management portal for accounting firms.
+  A secure client document management portal for accounting firms.
 </p>
 
 <p align="center">
-  <a href="https://clientlocker-omega.vercel.app/">Live Demo</a>
+  <a href="https://clientlocker-omega.vercel.app/">Live Demo</a>
 </p>
 
 
@@ -18,6 +18,9 @@
 **Working Folw**
 
 [https://drive.google.com/file/d/1SsLzqWH4YN71JOXBUDMqqUrI_ldovYc9/view?usp=sharing]
+
+**AI Future working Video Link**
+[https://drive.google.com/file/d/1eXAz5hyOAhIkT1GM9lMr2pjjvAfvd0f4/view?usp=sharing]
 
 ---
 
@@ -96,13 +99,46 @@ The primary objective is to prevent unauthorized access to confidential client f
 - Temporary download links with 10-minute expiry.
 - Activity logging for document operations.
 - Blocked access attempt logging.
-- AI-powered document checklist suggestions.
-- AI suggestion confirmation workflow.
+- AI-powered document classification and checklist suggestions.
+- Human-in-the-loop AI suggestion approval and rejection workflow.
 - Automated permission and security tests.
 
 *Feature availability depends on implementation and successful testing.*
 
-## 6. Technology Stack
+## 6. AI-Powered Document Intelligence
+ClientLocker integrates with a separately hosted Standalone-AI microservice to help authorized accounting staff identify which client checklist requirement an uploaded document may satisfy.
+AI Capabilities
+Document text extraction: The backend extracts text from supported text-based PDF documents before sending the required content for analysis.
+Document classification: The AI service analyzes document text and identifies its likely document type.
+Checklist matching: The AI compares the document against the client's open checklist requirements.
+Confidence score and explanation: The suggestion includes a match score and a reason explaining the detected match.
+Pending suggestions: AI results are saved as pending suggestions for staff review.
+Human-in-the-loop approval: Authorized staff or partners must explicitly approve or reject each suggestion.
+Checklist synchronization: An approved suggestion can mark the matching checklist item complete and associate the uploaded document with that requirement.
+Rejection handling: Rejecting a suggestion leaves the checklist item unchanged.
+Duplicate-review protection: A suggestion cannot be approved or rejected more than once.
+Audit trail: AI suggestion generation, approval and rejection are recorded in the activity log.
+AI Review Workflow
+An authorized staff member uploads a client document.
+The backend securely retrieves the document and extracts its text.
+The backend sends the analysis request to the Standalone-AI service using server-to-server authentication.
+The AI service returns a document classification and checklist match.
+ClientLocker validates that the suggested checklist item belongs to the same client.
+The suggestion is stored with `pending` status.
+An authorized user reviews and approves or rejects the suggestion.
+Only after approval is the checklist item marked complete and the action recorded in the audit log.
+Important: AI does not automatically complete checklist items. Human review and approval are required.
+Privacy and Security
+AI requests are initiated by the ClientLocker backend, not directly from the browser.
+The Standalone-AI API key is stored only in backend environment variables.
+Private documents are retrieved through the application's authorized document-access flow.
+Client and checklist ownership are validated before saving or approving suggestions.
+Client and auditor roles cannot perform internal AI review actions.
+AI service failures do not prevent staff from using the manual checklist workflow.
+Scanned or image-only PDFs that do not contain an extractable text layer are flagged for manual review; text is not fabricated.
+AI Service Architecture
+ClientLocker communicates with Standalone-AI as an independent FastAPI microservice over authenticated HTTPS requests. The AI service remains separately deployed and is not bundled into the React frontend or Express backend repository.
+## 8. Technology Stack
 
 ### Frontend
 
@@ -139,56 +175,56 @@ The primary objective is to prevent unauthorized access to confidential client f
 - Vercel – Frontend deployment
 - GitHub Actions – Automated checks
 
-## 7. Project Structure
+## 8. Project Structure
 
 ```text
 clientlocker/
 │
 ├── backend/
-│   ├── config/
-│   ├── controllers/
-│   ├── middleware/
-│   ├── models/
-│   │   ├── Firm.js
-│   │   ├── Person.js
-│   │   ├── Client.js
-│   │   ├── ClientAccess.js
-│   │   └── ChecklistItem.js
-│   ├── routes/
-│   ├── scripts/
-│   │   └── seed.js
-│   ├── uploads/
-│   ├── server.js
-│   └── package.json
+│   ├── config/
+│   ├── controllers/
+│   ├── middleware/
+│   ├── models/
+│   │   ├── Firm.js
+│   │   ├── Person.js
+│   │   ├── Client.js
+│   │   ├── ClientAccess.js
+│   │   └── ChecklistItem.js
+│   ├── routes/
+│   ├── scripts/
+│   │   └── seed.js
+│   ├── uploads/
+│   ├── server.js
+│   └── package.json
 │
 ├── frontend/
-│   ├── public/
-│   ├── src/
-│   │   ├── assets/
-│   │   ├── components/
-│   │   │   ├── common/
-│   │   │   └── layout/
-│   │   ├── context/
-│   │   ├── pages/
-│   │   │   ├── public/
-│   │   │   ├── auth/
-│   │   │   ├── partner/
-│   │   │   ├── staff/
-│   │   │   └── client/
-│   │   ├── App.jsx
-│   │   ├── App.css
-│   │   ├── index.css
-│   │   └── main.jsx
-│   │
-│   ├── package.json
-│   ├── package-lock.json
-│   └── vite.config.js
+│   ├── public/
+│   ├── src/
+│   │   ├── assets/
+│   │   ├── components/
+│   │   │   ├── common/
+│   │   │   └── layout/
+│   │   ├── context/
+│   │   ├── pages/
+│   │   │   ├── public/
+│   │   │   ├── auth/
+│   │   │   ├── partner/
+│   │   │   ├── staff/
+│   │   │   └── client/
+│   │   ├── App.jsx
+│   │   ├── App.css
+│   │   ├── index.css
+│   │   └── main.jsx
+│   │
+│   ├── package.json
+│   ├── package-lock.json
+│   └── vite.config.js
 │
 ├── docs/
-│   └── PLAN.pdf
+│   └── PLAN.pdf
 │
 ├── .github/
-│   └── workflows/
+│   └── workflows/
 │
 ├── .gitignore
 └── README.md
@@ -196,7 +232,7 @@ clientlocker/
 
 *This is a reference structure. Actual folders and filenames may differ according to the implementation.*
 
-## 8. Database Seed Data
+## 9. Database Seed Data
 
 ClientLocker includes a database seed script to generate demonstration data.
 
@@ -241,7 +277,7 @@ Each client receives five checklist items:
 4. Tax return documents
 5. Business financial statements
 
-## 9. Demo Login Credentials
+## 10. Demo Login Credentials
 
 The following credentials are generated by the project's database seed script.
 
@@ -299,7 +335,7 @@ ClientLocker@2026
 - Do not use demonstration credentials in production.
 - Never use real client information or confidential documents.
 
-## 10. Installation and Setup
+## 11. Installation and Setup
 
 ### Prerequisites
 
@@ -410,7 +446,7 @@ http://localhost:5173
 npm run build
 ```
 
-## 11. M2 Complete Working Flow
+## 12. M2 Complete Working Flow
 
 The primary M2 demonstration flow covers authentication and client document management.
 
@@ -458,7 +494,7 @@ The document list displays:
 
 Select the uploaded document and verify that it opens successfully.
 
-## 12. Environment Variables and Security
+## 13. Environment Variables and Security
 
 Environment variables must be configured locally and on the appropriate deployment platform.
 
@@ -488,7 +524,7 @@ JWT_SECRET=your_secure_jwt_secret
 - Never trust roles supplied by the frontend.
 - Use made-up data for development and testing.
 
-## 13. M2 Testing Checklist
+## 14. M2 Testing Checklist
 
 The following checks are important for verifying the M2 working flow.
 
@@ -508,7 +544,7 @@ The following checks are important for verifying the M2 working flow.
 
 *These are demonstration test cases. Actual results should be verified before marking them as passed.*
 
-## 14. M2 Screen Recording
+## 15. M2 Screen Recording
 
 **60-Second Working Flow Demonstration**
 
@@ -531,7 +567,7 @@ The recording should demonstrate:
 - Add the working link above.
 - Do not upload the recording to YouTube or LinkedIn.
 
-## 15. Development Milestones
+## 16. Development Milestones
 
 ClientLocker is being developed as part of the Vizdale Full-Stack Developer Internship.
 
@@ -539,10 +575,10 @@ ClientLocker is being developed as part of the Vizdale Full-Stack Developer Inte
 |---|---|---|
 | M1 | Initial setup, live landing page and project plan | Completed |
 | M2 | Authentication, role-based dashboards and document upload/open flow | M2 submission |
-| M3 | Server-side access rules, magic links, download links, activity logs, auditor and AI feature | Upcoming |
+| M3 | Server-side access rules, magic links, download links, activity logs, auditor and AI feature | In progress |
 | M4 | Final fixes, documentation, testing, video and hand-in | Upcoming |
 
-## 16. Future Improvements
+## 17. Future Improvements
 
 Planned improvements include:
 
@@ -551,7 +587,7 @@ Planned improvements include:
 - Expiring document download links.
 - Complete activity history.
 - Auditor-specific document access.
-- AI-powered document checklist suggestions.
+- AI-powered document classification and checklist suggestions.
 - Improved document security.
 - Additional automated backend tests.
 
@@ -571,9 +607,9 @@ Planned improvements include:
 ---
 
 <p align="center">
-  <strong>ClientLocker – Your Documents. Our Priority.</strong>
+  <strong>ClientLocker – Your Documents. Our Priority.</strong>
 </p>
 
 <p align="center">
-  Developed as part of the Vizdale Full-Stack Developer Internship – November 2026.
+  Developed as part of the Vizdale Full-Stack Developer Internship – November 2026.
 </p>
