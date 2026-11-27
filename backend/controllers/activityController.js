@@ -43,7 +43,12 @@ const getActivityLogs = async (req, res) => {
         select: "name email role"
       })
       .populate({
+        path: "target_person_id",
+        select: "name email role"
+      })
+      .populate({
         path: "client_id",
+        match: { firm_id: partner.firm_id },
         select: "name firm_id"
       })
       .populate({

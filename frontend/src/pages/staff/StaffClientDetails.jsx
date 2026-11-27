@@ -33,23 +33,47 @@ export default function StaffClientDetails() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const fetchClientData = useCallback(async () => {
+  const fetchClientData = useCallback(async (silent = false) => {
     if (!clientId) {
       setClient(null);
       setFiles([]);
       setChecklist([]);
       setSuggestions([]);
       setError("Client ID is missing.");
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
       return;
     }
 
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       setError("");
 
-      // Fetch clients available to the logged-in user (partner or staff)
-      const clientResponse = await apiRequest("/api/clients");
+      // Verify client access on the backend first so direct URL visits
+      // and stale-tab refreshes trigger server enforcement and logging.
+      const fileRes = await getClientFiles(clientId);
+
+      const rethrowIfAuthError = (err) => {
+        if (err?.status === 401 || err?.status === 403 || err?.status === 404) {
+          throw err;
+        }
+        return null;
+      };
+
+      const [clientResponse, checklistRes, suggRes] = await Promise.all([
+        apiRequest("/api/clients"),
+        getClientChecklist(clientId).catch((err) => {
+          rethrowIfAuthError(err);
+          return { items: [] };
+        }),
+        getAISuggestions(clientId).catch((err) => {
+          rethrowIfAuthError(err);
+          return { suggestions: [] };
+        })
+      ]);
 
       const clients = Array.isArray(clientResponse.clients)
         ? clientResponse.clients
@@ -66,29 +90,49 @@ export default function StaffClientDetails() {
       }
 
       setClient(selectedClient);
-
-      // Concurrently fetch files, checklist, and AI suggestions
-      const [fileRes, checklistRes, suggRes] = await Promise.all([
-        getClientFiles(clientId).catch(() => ({ files: [] })),
-        getClientChecklist(clientId).catch(() => ({ items: [] })),
-        getAISuggestions(clientId).catch(() => ({ suggestions: [] }))
-      ]);
-
       setFiles(Array.isArray(fileRes?.files) ? fileRes.files : []);
       setChecklist(Array.isArray(checklistRes?.items) ? checklistRes.items : []);
       setSuggestions(Array.isArray(suggRes?.suggestions) ? suggRes.suggestions : []);
     } catch (err) {
       setClient(null);
       setFiles([]);
+      setChecklist([]);
+      setSuggestions([]);
       setError(err.message || "Unable to load client information.");
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [clientId]);
 
   useEffect(() => {
-    fetchClientData();
+    fetchClientData(false);
   }, [fetchClientData]);
+
+  // Re-verify active client workspace when the tab regains focus
+  // so stale tabs lose access immediately after revocation.
+  useEffect(() => {
+    if (!client) {
+      return undefined;
+    }
+
+    const handleRevalidate = () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      fetchClientData(true);
+    };
+
+    window.addEventListener("focus", handleRevalidate);
+    document.addEventListener("visibilitychange", handleRevalidate);
+
+    return () => {
+      window.removeEventListener("focus", handleRevalidate);
+      document.removeEventListener("visibilitychange", handleRevalidate);
+    };
+  }, [client, fetchClientData]);
 
   // Handle AI analysis on a document
   const handleAnalyzeFile = async (file) => {
@@ -160,7 +204,7 @@ export default function StaffClientDetails() {
   };
 
   const handleBack = () => {
-    navigate(user?.role === "partner" ? "/partner/dashboard" : "/staff");
+    navigate(user?.role === "partner" ? "/partner/dashboard" : "/staff/dashboard");
   };
 
   if (loading) {
@@ -180,7 +224,7 @@ export default function StaffClientDetails() {
           ← Back to clients
         </button>
         <div className="staff-details-error">{error}</div>
-        <button type="button" className="staff-back-button" onClick={fetchClientData}>
+        <button type="button" className="staff-back-button" onClick={() => fetchClientData(false)}>
           Try again
         </button>
       </main>

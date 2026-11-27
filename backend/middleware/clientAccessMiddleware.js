@@ -9,14 +9,26 @@ const ActivityLog = require("../models/ActivityLog");
 // LOG BLOCKED ACCESS
 // ==========================================
 
-const logBlockedAccess = async (user, clientId) => {
+const logBlockedAccess = async (
+  user,
+  clientId,
+  fileId = null,
+  action = "ACCESS_BLOCKED"
+) => {
+  if (!user?._id) {
+    return;
+  }
+
   try {
     await ActivityLog.create({
       person_id: user._id,
       client_id: mongoose.Types.ObjectId.isValid(clientId)
         ? clientId
         : null,
-      action: "ACCESS_BLOCKED",
+      file_id: mongoose.Types.ObjectId.isValid(fileId)
+        ? fileId
+        : null,
+      action,
       blocked: true
     });
   } catch (error) {
@@ -164,5 +176,6 @@ const requireClientAccess = async (req, res, next) => {
 };
 
 module.exports = {
-  requireClientAccess
+  requireClientAccess,
+  logBlockedAccess
 };

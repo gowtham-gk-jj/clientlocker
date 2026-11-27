@@ -6,6 +6,7 @@ const ChecklistSuggestion = require("../models/ChecklistSuggestion");
 const Client = require("../models/Client");
 const ClientAccess = require("../models/ClientAccess");
 const ActivityLog = require("../models/ActivityLog");
+const { logBlockedAccess } = require("../middleware/clientAccessMiddleware");
 
 const AUDITOR_MAX_CLIENTS = 2;
 
@@ -124,6 +125,8 @@ const getClientChecklist = async (req, res) => {
     );
 
     if (!allowed) {
+      await logBlockedAccess(req.user, clientId);
+
       return res.status(403).json({
         success: false,
         message: "You do not have access to this client's checklist."
@@ -190,6 +193,8 @@ const updateChecklistItem = async (req, res) => {
     );
 
     if (!allowed) {
+      await logBlockedAccess(req.user, item.client_id);
+
       return res.status(403).json({
         success: false,
         message: "You do not have permission to update this checklist."
@@ -197,6 +202,8 @@ const updateChecklistItem = async (req, res) => {
     }
 
     if (req.user.role === "auditor") {
+      await logBlockedAccess(req.user, item.client_id);
+
       return res.status(403).json({
         success: false,
         message: "Auditors have read-only checklist access."
@@ -235,6 +242,8 @@ const getAISuggestions = async (req, res) => {
     );
 
     if (!allowed) {
+      await logBlockedAccess(req.user, clientId);
+
       return res.status(403).json({
         success: false,
         message: "You do not have access to these suggestions."
@@ -316,6 +325,12 @@ const decideAISuggestion = async (req, res) => {
     );
 
     if (!allowed) {
+      await logBlockedAccess(
+        req.user,
+        suggestion.client_id,
+        suggestion.file_id
+      );
+
       return res.status(403).json({
         success: false,
         message: "You do not have permission to review this suggestion."

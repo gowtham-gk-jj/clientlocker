@@ -11,6 +11,7 @@ export default function StaffDashboard() {
 
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
   // Logout
@@ -20,9 +21,13 @@ export default function StaffDashboard() {
   };
 
   // Fetch assigned clients
-  const fetchClients = useCallback(async () => {
+  const fetchClients = useCallback(async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
       setError("");
 
       const data = await apiRequest("/api/clients");
@@ -33,15 +38,44 @@ export default function StaffDashboard() {
 
       setClients(data.clients);
     } catch (err) {
-      setClients([]);
+      if (!silent) {
+        setClients([]);
+      }
       setError(err.message || "Unable to load clients.");
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      } else {
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    fetchClients();
+    fetchClients({ silent: false });
+
+    const handleSync = () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      fetchClients({ silent: true });
+    };
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchClients({ silent: true });
+      }
+    }, 5000);
+
+    window.addEventListener("focus", handleSync);
+    document.addEventListener("visibilitychange", handleSync);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleSync);
+      document.removeEventListener("visibilitychange", handleSync);
+    };
   }, [fetchClients]);
 
   return (
@@ -89,6 +123,15 @@ export default function StaffDashboard() {
             <h2>Assigned clients</h2>
             <p>Select a client to manage their documents.</p>
           </div>
+
+          <button
+            type="button"
+            className="staff-refresh-btn"
+            onClick={() => fetchClients({ silent: true })}
+            disabled={loading || refreshing}
+          >
+            {refreshing ? "Refreshing..." : "↻ Refresh"}
+          </button>
         </div>
 
         {loading && (
@@ -103,7 +146,7 @@ export default function StaffDashboard() {
 
             <button
               type="button"
-              onClick={fetchClients}
+              onClick={() => fetchClients({ silent: false })}
             >
               Try again
             </button>

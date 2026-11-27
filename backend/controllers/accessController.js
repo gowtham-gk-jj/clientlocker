@@ -29,10 +29,16 @@ const isValidPartner = (partner) => {
 // ACTIVITY LOGGING
 // ==========================================
 
-const recordAccessActivity = async (personId, action, clientId) => {
+const recordAccessActivity = async (
+  personId,
+  action,
+  clientId,
+  targetPersonId = null
+) => {
   try {
     await ActivityLog.create({
       person_id: personId,
+      target_person_id: targetPersonId || null,
       client_id: clientId || null,
       action,
       blocked: false
@@ -156,7 +162,8 @@ const giveClientAccess = async (req, res) => {
     await recordAccessActivity(
       partner._id,
       "ACCESS_GRANTED",
-      client._id
+      client._id,
+      person._id
     );
 
     return res.status(201).json({
@@ -269,7 +276,8 @@ const removeClientAccess = async (req, res) => {
     await recordAccessActivity(
       partner._id,
       "ACCESS_REMOVED",
-      client._id
+      client._id,
+      assignedPerson._id
     );
 
     return res.status(200).json({
@@ -364,5 +372,6 @@ const getClientAccess = async (req, res) => {
 module.exports = {
   giveClientAccess,
   removeClientAccess,
-  getClientAccess
+  getClientAccess,
+  recordAccessActivity
 };

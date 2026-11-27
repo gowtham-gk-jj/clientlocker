@@ -11,11 +11,16 @@ export default function AuditorDashboard() {
 
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  const fetchClients = useCallback(async () => {
+  const fetchClients = useCallback(async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
       setError("");
 
       const data = await apiRequest("/api/clients");
@@ -27,9 +32,16 @@ export default function AuditorDashboard() {
       // The backend enforces the auditor's assigned-client limit.
       setClients(data.clients);
     } catch (err) {
+      if (!silent) {
+        setClients([]);
+      }
       setError(err.message || "Unable to load assigned clients.");
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      } else {
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -50,7 +62,30 @@ export default function AuditorDashboard() {
   };
 
   useEffect(() => {
-    fetchClients();
+    fetchClients({ silent: false });
+
+    const handleSync = () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      fetchClients({ silent: true });
+    };
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchClients({ silent: true });
+      }
+    }, 5000);
+
+    window.addEventListener("focus", handleSync);
+    document.addEventListener("visibilitychange", handleSync);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleSync);
+      document.removeEventListener("visibilitychange", handleSync);
+    };
   }, [fetchClients]);
 
   return (
@@ -119,10 +154,22 @@ export default function AuditorDashboard() {
             </p>
           </div>
 
-          <span className="auditor-client-total">
-            {clients.length}{" "}
-            {clients.length === 1 ? "Client" : "Clients"}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <button
+              type="button"
+              className="auditor-client-total"
+              style={{ cursor: "pointer" }}
+              onClick={() => fetchClients({ silent: true })}
+              disabled={loading || refreshing}
+            >
+              {refreshing ? "Refreshing..." : "↻ Refresh"}
+            </button>
+
+            <span className="auditor-client-total">
+              {clients.length}{" "}
+              {clients.length === 1 ? "Client" : "Clients"}
+            </span>
+          </div>
         </div>
 
         {loading && (
@@ -139,7 +186,7 @@ export default function AuditorDashboard() {
 
             <button
               type="button"
-              onClick={fetchClients}
+              onClick={() => fetchClients({ silent: false })}
             >
               Try again
             </button>

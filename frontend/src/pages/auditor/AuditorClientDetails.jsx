@@ -19,18 +19,27 @@ export default function AuditorClientDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const fetchClientData = useCallback(async () => {
+  const fetchClientData = useCallback(async (silent = false) => {
     if (!clientId) {
+      setClient(null);
+      setFiles([]);
       setError("Client ID is missing.");
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
       return;
     }
 
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       setError("");
 
-      // The backend must return only clients assigned to this auditor.
+      // Verify backend client access first so direct URL checks hit requireClientAccess.
+      const fileResponse = await getClientFiles(clientId);
+
+      // Load client name from the backend's authorized list.
       const clientResponse = await apiRequest("/api/clients");
 
       const clients = clientResponse.clients || [];
@@ -47,23 +56,45 @@ export default function AuditorClientDetails() {
       }
 
       setClient(selectedClient);
-
-      // Fetch files through the authenticated API.
-      const fileResponse = await getClientFiles(clientId);
-
       setFiles(fileResponse.files || []);
     } catch (err) {
+      setClient(null);
+      setFiles([]);
       setError(
         err.message || "Unable to load client information."
       );
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [clientId]);
 
   useEffect(() => {
-    fetchClientData();
+    fetchClientData(false);
   }, [fetchClientData]);
+
+  useEffect(() => {
+    if (!client) {
+      return undefined;
+    }
+
+    const handleRevalidate = () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      fetchClientData(true);
+    };
+
+    window.addEventListener("focus", handleRevalidate);
+    document.addEventListener("visibilitychange", handleRevalidate);
+
+    return () => {
+      window.removeEventListener("focus", handleRevalidate);
+      document.removeEventListener("visibilitychange", handleRevalidate);
+    };
+  }, [client, fetchClientData]);
 
   if (loading) {
     return (

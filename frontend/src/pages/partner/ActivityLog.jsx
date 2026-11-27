@@ -107,6 +107,30 @@ export default function ActivityLog() {
         label: "File download blocked",
         icon: ShieldAlert,
         className: "al-blocked"
+      },
+
+      AI_DOCUMENT_PROCESSED: {
+        label: "AI document processed",
+        icon: Activity,
+        className: "al-default"
+      },
+
+      AI_CHECKLIST_SUGGESTED: {
+        label: "AI checklist suggested",
+        icon: Activity,
+        className: "al-default"
+      },
+
+      AI_CHECKLIST_ACCEPTED: {
+        label: "AI checklist accepted",
+        icon: ShieldCheck,
+        className: "al-granted"
+      },
+
+      AI_CHECKLIST_REJECTED: {
+        label: "AI checklist rejected",
+        icon: UserMinus,
+        className: "al-removed"
       }
     };
 
@@ -402,6 +426,12 @@ export default function ActivityLog() {
 
                           {personEmail && (
                             <small>{personEmail}</small>
+                          )}
+
+                          {item.target_person_id && (
+                            <small>
+                              Target: {getPersonName(item.target_person_id)}
+                            </small>
                           )}
                         </div>
                       </td>

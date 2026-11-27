@@ -206,10 +206,15 @@ export default function PartnerDashboard() {
 
   const formatActivityText = (log) => {
     const actor = log.person_id?.name || "System";
+    const target = log.target_person_id?.name;
     const client = log.client_id?.name || "client space";
     const file = log.file_id?.name || "document";
 
     if (log.blocked) {
+      if (log.action === "FILE_DOWNLOAD_BLOCKED") {
+        return `Blocked file download attempt by ${actor} on ${client}`;
+      }
+
       return `Blocked unauthorized access attempt by ${actor} on ${client}`;
     }
 
@@ -221,10 +226,14 @@ export default function PartnerDashboard() {
         return `${actor} opened ${file} in ${client}`;
 
       case "ACCESS_GRANTED":
-        return `Access granted for ${actor} to ${client}`;
+        return target
+          ? `${actor} granted ${target} access to ${client}`
+          : `Access granted by ${actor} for ${client}`;
 
       case "ACCESS_REMOVED":
-        return `Access revoked for ${actor} on ${client}`;
+        return target
+          ? `${actor} removed ${target}'s access from ${client}`
+          : `Access revoked by ${actor} on ${client}`;
 
       default:
         return `${actor} performed ${log.action?.toLowerCase()} on ${client}`;

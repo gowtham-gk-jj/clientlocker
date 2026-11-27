@@ -9,6 +9,7 @@ const ChecklistItem = require("../models/ChecklistItem");
 const ChecklistSuggestion = require("../models/ChecklistSuggestion");
 const ActivityLog = require("../models/ActivityLog");
 const ClientAccess = require("../models/ClientAccess");
+const { logBlockedAccess } = require("../middleware/clientAccessMiddleware");
 
 const {
   generatePrivateDownloadUrl
@@ -98,6 +99,8 @@ exports.generateChecklistSuggestions = async (req, res, next) => {
     }
 
     if (!["partner", "staff"].includes(user.role)) {
+      await logBlockedAccess(user, clientId, fileId);
+
       return res.status(403).json({
         success: false,
         message: "Only partners and staff can generate AI suggestions."
@@ -110,6 +113,8 @@ exports.generateChecklistSuggestions = async (req, res, next) => {
     });
 
     if (!client) {
+      await logBlockedAccess(user, clientId, fileId);
+
       return res.status(404).json({
         success: false,
         message: "Client not found."
@@ -123,6 +128,8 @@ exports.generateChecklistSuggestions = async (req, res, next) => {
       });
 
       if (!access) {
+        await logBlockedAccess(user, clientId, fileId);
+
         return res.status(403).json({
           success: false,
           message: "You do not have access to this client."

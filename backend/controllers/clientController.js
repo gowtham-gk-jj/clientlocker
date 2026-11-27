@@ -8,6 +8,7 @@ const Person = require("../models/Person");
 const MagicLink = require("../models/MagicLink");
 
 const { sendMagicLinkEmail } = require("../services/emailService");
+const { recordAccessActivity } = require("./accessController");
 
 // ==========================================
 // COMMON HELPERS
@@ -618,6 +619,13 @@ const assignClient = async (req, res) => {
       given_by: req.user._id
     });
 
+    await recordAccessActivity(
+      req.user._id,
+      "ACCESS_GRANTED",
+      client._id,
+      person._id
+    );
+
     return res.status(201).json({
       success: true,
       message: `${person.name} (${person.role}) assigned successfully.`,
@@ -799,6 +807,13 @@ const removeClientAssignment = async (req, res) => {
         message: "Client assignment not found."
       });
     }
+
+    await recordAccessActivity(
+      req.user._id,
+      "ACCESS_REMOVED",
+      client._id,
+      person._id
+    );
 
     return res.status(200).json({
       success: true,

@@ -10,6 +10,13 @@ const activityLogSchema = new mongoose.Schema(
       required: [true, "Person ID is required"]
     },
 
+    // Target person affected by access changes (e.g., staff/auditor).
+    target_person_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Person",
+      default: null
+    },
+
     // Client associated with the activity.
     client_id: {
       type: mongoose.Schema.Types.ObjectId,
