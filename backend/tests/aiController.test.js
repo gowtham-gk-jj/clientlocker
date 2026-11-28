@@ -1,6 +1,12 @@
 const mongoose = require("mongoose");
-const { generateChecklistSuggestions } = require("../controllers/aiChecklistController");
-const { decideAISuggestion } = require("../controllers/checklistController");
+const {
+  generateChecklistSuggestions,
+  suggestForFile
+} = require("../controllers/aiChecklistController");
+const {
+  decideAISuggestion,
+  confirmFileSuggestion
+} = require("../controllers/checklistController");
 
 // Mock dependencies
 const StoredFile = require("../models/File");
@@ -312,6 +318,137 @@ describe("AI Controller & Authorization Tests", () => {
     expect(mockSuggestion.save).toHaveBeenCalled();
     expect(ActivityLog.create).toHaveBeenCalledWith(expect.objectContaining({
       action: "AI_CHECKLIST_REJECTED"
+    }));
+  });
+
+  test("10. Confirming suggestion ticks matched incomplete checklist item", async () => {
+    const suggestionId = new mongoose.Types.ObjectId();
+    const itemId = new mongoose.Types.ObjectId();
+    const mockChecklistItem = {
+      _id: itemId,
+      client_id: clientId,
+      name: "March bank statement",
+      done: false,
+      save: jest.fn().mockResolvedValue(true)
+    };
+    const mockSuggestion = {
+      _id: suggestionId,
+      client_id: clientId,
+      file_id: fileId,
+      firm_id: firmId,
+      matched_checklist_item_id: itemId,
+      status: "pending",
+      save: jest.fn().mockResolvedValue(true)
+    };
+
+    ChecklistSuggestion.findOne.mockResolvedValue(mockSuggestion);
+    Client.findOne.mockReturnValue({
+      select: jest.fn().mockResolvedValue({ _id: clientId })
+    });
+    ChecklistItem.findOne.mockResolvedValue(mockChecklistItem);
+
+    const decideReq = {
+      user: { _id: partnerId, firm_id: firmId, role: "partner" },
+      params: { id: suggestionId.toString() },
+      body: { status: "accepted" }
+    };
+
+    await decideAISuggestion(decideReq, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockChecklistItem.done).toBe(true);
+    expect(mockChecklistItem.save).toHaveBeenCalled();
+    expect(mockSuggestion.status).toBe("accepted");
+  });
+
+  test("11. Confirming an already completed checklist item returns HTTP 409", async () => {
+    const suggestionId = new mongoose.Types.ObjectId();
+    const itemId = new mongoose.Types.ObjectId();
+    const mockChecklistItem = {
+      _id: itemId,
+      client_id: clientId,
+      name: "March bank statement",
+      done: true,
+      save: jest.fn()
+    };
+    const mockSuggestion = {
+      _id: suggestionId,
+      client_id: clientId,
+      file_id: fileId,
+      firm_id: firmId,
+      matched_checklist_item_id: itemId,
+      status: "pending",
+      save: jest.fn()
+    };
+
+    ChecklistSuggestion.findOne.mockResolvedValue(mockSuggestion);
+    Client.findOne.mockReturnValue({
+      select: jest.fn().mockResolvedValue({ _id: clientId })
+    });
+    ChecklistItem.findOne.mockResolvedValue(mockChecklistItem);
+
+    const decideReq = {
+      user: { _id: partnerId, firm_id: firmId, role: "partner" },
+      params: { id: suggestionId.toString() },
+      body: { status: "accepted" }
+    };
+
+    await decideAISuggestion(decideReq, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockChecklistItem.save).not.toHaveBeenCalled();
+    expect(mockSuggestion.save).not.toHaveBeenCalled();
+  });
+
+  test("12. Invalid file ID on POST /api/files/:id/suggest returns HTTP 400", async () => {
+    const suggestReq = {
+      user: { _id: partnerId, firm_id: firmId, role: "partner" },
+      params: { id: "not-an-object-id" }
+    };
+
+    await suggestForFile(suggestReq, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: false,
+      message: "Invalid file ID."
+    }));
+  });
+
+  test("13. Manual checklist selection via POST /api/files/:id/confirm completes selected item", async () => {
+    const itemId = new mongoose.Types.ObjectId();
+    const mockChecklistItem = {
+      _id: itemId,
+      client_id: clientId,
+      name: "Tax return documents",
+      done: false,
+      save: jest.fn().mockResolvedValue(true)
+    };
+
+    StoredFile.findById.mockReturnValue({
+      select: jest.fn().mockResolvedValue({ _id: fileId, client_id: clientId })
+    });
+    Client.findOne.mockReturnValue({
+      select: jest.fn().mockResolvedValue({ _id: clientId })
+    });
+    ChecklistSuggestion.findOne.mockReturnValue({
+      sort: jest.fn().mockResolvedValue(null)
+    });
+    ChecklistItem.findOne.mockResolvedValue(mockChecklistItem);
+
+    const confirmReq = {
+      user: { _id: partnerId, firm_id: firmId, role: "partner" },
+      params: { id: fileId.toString() },
+      body: { checklist_item_id: itemId.toString(), status: "accepted" }
+    };
+
+    await confirmFileSuggestion(confirmReq, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockChecklistItem.done).toBe(true);
+    expect(mockChecklistItem.save).toHaveBeenCalled();
+    expect(ActivityLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      action: "AI_CHECKLIST_ACCEPTED"
     }));
   });
 });

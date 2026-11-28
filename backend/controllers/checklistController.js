@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 
 const ChecklistItem = require("../models/ChecklistItem");
 const ChecklistSuggestion = require("../models/ChecklistSuggestion");
+const StoredFile = require("../models/File");
 const Client = require("../models/Client");
 const ClientAccess = require("../models/ClientAccess");
 const ActivityLog = require("../models/ActivityLog");
@@ -344,8 +345,49 @@ const decideAISuggestion = async (req, res) => {
       });
     }
 
-    // Update only the suggestion status.
-    // Do not automatically complete the checklist item.
+    const requestedChecklistItemId = req.body?.checklist_item_id;
+    let completedChecklistItem = null;
+
+    if (status === "accepted") {
+      const targetChecklistItemId =
+        requestedChecklistItemId || suggestion.matched_checklist_item_id;
+
+      if (targetChecklistItemId) {
+        if (!mongoose.Types.ObjectId.isValid(targetChecklistItemId)) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid checklist item ID."
+          });
+        }
+
+        const checklistItem = await ChecklistItem.findOne({
+          _id: targetChecklistItemId,
+          client_id: suggestion.client_id
+        });
+
+        if (!checklistItem) {
+          return res.status(404).json({
+            success: false,
+            message: "Checklist item not found for this client."
+          });
+        }
+
+        if (checklistItem.done) {
+          return res.status(409).json({
+            success: false,
+            message: "This checklist item is already completed."
+          });
+        }
+
+        checklistItem.done = true;
+        await checklistItem.save();
+        completedChecklistItem = checklistItem;
+
+        suggestion.matched_checklist_item_id = checklistItem._id;
+        suggestion.suggested_item = checklistItem.name;
+      }
+    }
+
     suggestion.status = status;
     suggestion.decided_by = req.user._id;
     suggestion.decided_at = new Date();
@@ -364,8 +406,12 @@ const decideAISuggestion = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: `AI checklist suggestion ${status} successfully.`,
-      suggestion
+      message:
+        status === "accepted" && completedChecklistItem
+          ? `Checklist item "${completedChecklistItem.name}" confirmed and completed.`
+          : `AI checklist suggestion ${status} successfully.`,
+      suggestion,
+      checklist_item: completedChecklistItem
     });
   } catch (error) {
     console.error("AI suggestion decision error:", error);
@@ -373,6 +419,141 @@ const decideAISuggestion = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Unable to update AI checklist suggestion."
+    });
+  }
+};
+
+// ==========================================
+// CONFIRM OR MANUALLY SELECT CHECKLIST ITEM BY FILE ID
+// POST /api/files/:id/confirm
+// ==========================================
+
+const confirmFileSuggestion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      suggestion_id: suggestionId,
+      checklist_item_id: checklistItemId,
+      status = "accepted"
+    } = req.body || {};
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid file ID."
+      });
+    }
+
+    if (!["accepted", "rejected"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Status must be accepted or rejected."
+      });
+    }
+
+    if (!["partner", "staff"].includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only partners and staff can confirm checklist items."
+      });
+    }
+
+    const file = await StoredFile.findById(id).select("_id client_id");
+
+    if (!file) {
+      return res.status(404).json({
+        success: false,
+        message: "Client file not found."
+      });
+    }
+
+    const allowed = await canAccessClient(req.user, file.client_id);
+
+    if (!allowed) {
+      await logBlockedAccess(req.user, file.client_id, file._id);
+
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to confirm checklist items for this client."
+      });
+    }
+
+    // If a pending suggestion exists (explicitly or latest for this file), delegate to decideAISuggestion
+    const pendingQuery = suggestionId
+      ? { _id: suggestionId, file_id: file._id, firm_id: req.user.firm_id }
+      : { file_id: file._id, firm_id: req.user.firm_id, status: "pending" };
+
+    if (suggestionId && !mongoose.Types.ObjectId.isValid(suggestionId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid suggestion ID."
+      });
+    }
+
+    const existingSuggestion = await ChecklistSuggestion.findOne(pendingQuery).sort({
+      created_at: -1
+    });
+
+    if (existingSuggestion) {
+      req.params.id = String(existingSuggestion._id);
+      req.body = { status, checklist_item_id: checklistItemId };
+      return decideAISuggestion(req, res);
+    }
+
+    if (status === "rejected") {
+      return res.status(200).json({
+        success: true,
+        message: "Suggestion dismissed. Checklist remains unchanged."
+      });
+    }
+
+    if (!checklistItemId || !mongoose.Types.ObjectId.isValid(checklistItemId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select a valid checklist item to confirm."
+      });
+    }
+
+    const checklistItem = await ChecklistItem.findOne({
+      _id: checklistItemId,
+      client_id: file.client_id
+    });
+
+    if (!checklistItem) {
+      return res.status(404).json({
+        success: false,
+        message: "Checklist item not found for this client."
+      });
+    }
+
+    if (checklistItem.done) {
+      return res.status(409).json({
+        success: false,
+        message: "This checklist item is already completed."
+      });
+    }
+
+    checklistItem.done = true;
+    await checklistItem.save();
+
+    await recordActivity({
+      user: req.user,
+      clientId: file.client_id,
+      fileId: file._id,
+      action: "AI_CHECKLIST_ACCEPTED"
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Checklist item "${checklistItem.name}" confirmed and completed.`,
+      checklist_item: checklistItem
+    });
+  } catch (error) {
+    console.error("Confirm file checklist error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to confirm checklist item."
     });
   }
 };
@@ -386,5 +567,6 @@ module.exports = {
   updateChecklistItem,
   getAISuggestions,
   decideAISuggestion,
+  confirmFileSuggestion,
   canAccessClient
 };

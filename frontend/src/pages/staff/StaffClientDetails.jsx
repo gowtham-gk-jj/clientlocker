@@ -9,7 +9,8 @@ import apiRequest, {
   updateChecklistItem,
   generateChecklistSuggestions,
   getAISuggestions,
-  decideAISuggestion
+  decideAISuggestion,
+  confirmFileChecklist
 } from "../../services/api";
 
 import StaffFileUpload from "./StaffFileUpload";
@@ -31,7 +32,12 @@ export default function StaffClientDetails() {
   const [decidingId, setDecidingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
   const [success, setSuccess] = useState("");
+  const [selectedChecklistBySuggestion, setSelectedChecklistBySuggestion] = useState({});
+  const [manualSelection, setManualSelection] = useState(null);
+  const [manualChecklistId, setManualChecklistId] = useState("");
+  const [confirmingManual, setConfirmingManual] = useState(false);
 
   const fetchClientData = useCallback(async (silent = false) => {
     if (!clientId) {
@@ -137,23 +143,33 @@ export default function StaffClientDetails() {
   // Handle AI analysis on a document
   const handleAnalyzeFile = async (file) => {
     const fileId = file.id || file._id;
-    if (!fileId || !clientId) return;
+    if (!fileId || !clientId || analyzingId) return;
 
     try {
       setAnalyzingId(fileId);
       setError("");
+      setWarning("");
       setSuccess("");
+      setManualSelection(null);
+      setManualChecklistId("");
 
       const res = await generateChecklistSuggestions(clientId, fileId);
 
       const count = res.suggestions?.length || 0;
-      setSuccess(
-        count > 0
-          ? `AI generated ${count} suggestion(s). Please review below.`
-          : res.message || "Document analyzed successfully."
-      );
+      if (count > 0) {
+        setSuccess(`AI generated ${count} suggestion(s). Please review and confirm below.`);
+      } else if (res.manual_selection_required) {
+        setWarning(res.message || "AI could not match automatically. Please select a checklist item manually below.");
+        setManualSelection({
+          fileId,
+          fileName: file.name || "Uploaded document",
+          message: res.message || "Please select the matching checklist item manually."
+        });
+      } else {
+        setSuccess(res.message || "Document analyzed successfully.");
+      }
 
-      await fetchClientData();
+      await fetchClientData(true);
     } catch (err) {
       setError(err.message || "Failed to generate AI suggestions.");
     } finally {
@@ -162,20 +178,71 @@ export default function StaffClientDetails() {
   };
 
   // Handle Accept / Reject AI suggestion
-  const handleDecideSuggestion = async (suggestionId, status) => {
+  const handleDecideSuggestion = async (suggestion, status) => {
+    const suggestionId = suggestion._id || suggestion.id;
+    if (!suggestionId || decidingId) return;
+
+    const defaultMatchedId =
+      suggestion.matched_checklist_item_id?._id ||
+      suggestion.matched_checklist_item_id ||
+      "";
+    const chosenChecklistId =
+      selectedChecklistBySuggestion[suggestionId] ?? defaultMatchedId;
+
+    if (status === "accepted" && !chosenChecklistId) {
+      setError("Please select an incomplete checklist item to confirm.");
+      return;
+    }
+
     try {
       setDecidingId(suggestionId);
       setError("");
+      setWarning("");
       setSuccess("");
 
-      const res = await decideAISuggestion(suggestionId, status);
+      const res = await decideAISuggestion(
+        suggestionId,
+        status,
+        status === "accepted" ? chosenChecklistId : null
+      );
       setSuccess(res.message || `Suggestion ${status} successfully.`);
 
-      await fetchClientData();
+      await fetchClientData(true);
     } catch (err) {
       setError(err.message || `Failed to ${status} suggestion.`);
     } finally {
       setDecidingId(null);
+    }
+  };
+
+  // Handle manual checklist selection fallback confirmation
+  const handleConfirmManualSelection = async () => {
+    if (!manualSelection?.fileId || confirmingManual) return;
+
+    if (!manualChecklistId) {
+      setError("Please select a checklist item to complete.");
+      return;
+    }
+
+    try {
+      setConfirmingManual(true);
+      setError("");
+      setWarning("");
+      setSuccess("");
+
+      const res = await confirmFileChecklist(manualSelection.fileId, {
+        checklistItemId: manualChecklistId,
+        status: "accepted"
+      });
+
+      setSuccess(res.message || "Checklist item confirmed and completed.");
+      setManualSelection(null);
+      setManualChecklistId("");
+      await fetchClientData(true);
+    } catch (err) {
+      setError(err.message || "Failed to confirm checklist item.");
+    } finally {
+      setConfirmingManual(false);
     }
   };
 
@@ -232,6 +299,7 @@ export default function StaffClientDetails() {
   }
 
   const completedChecklistCount = checklist.filter((i) => i.done).length;
+  const openChecklistItems = checklist.filter((i) => !i.done);
   const pendingSuggestions = suggestions.filter((s) => s.status === "pending");
 
   return (
@@ -252,6 +320,7 @@ export default function StaffClientDetails() {
       </header>
 
       {error && <div className="staff-details-error">{error}</div>}
+      {warning && <div className="staff-details-warning">{warning}</div>}
       {success && <div className="staff-details-success">{success}</div>}
 
       <div className="staff-details-stats">
@@ -323,6 +392,65 @@ export default function StaffClientDetails() {
         )}
       </section>
 
+      {/* MANUAL CHECKLIST SELECTION FALLBACK */}
+      {manualSelection && (
+        <section className="staff-details-suggestions-card staff-manual-selection-card">
+          <div className="staff-details-card-header">
+            <div>
+              <h2>Manual Checklist Selection</h2>
+              <p>
+                File: <strong>{manualSelection.fileName}</strong> — {manualSelection.message}
+              </p>
+            </div>
+            <span className="staff-badge staff-badge-pending">Manual Review</span>
+          </div>
+
+          {openChecklistItems.length === 0 ? (
+            <p style={{ color: "#718096", margin: 0 }}>
+              All checklist items for this client are already completed.
+            </p>
+          ) : (
+            <div className="staff-suggestion-select-row">
+              <select
+                className="staff-suggestion-select"
+                value={manualChecklistId}
+                onChange={(e) => setManualChecklistId(e.target.value)}
+                disabled={confirmingManual}
+              >
+                <option value="">-- Select an incomplete checklist item --</option>
+                {openChecklistItems.map((item) => {
+                  const itemId = item._id || item.id;
+                  return (
+                    <option key={itemId} value={itemId}>
+                      {item.name}
+                    </option>
+                  );
+                })}
+              </select>
+              <button
+                type="button"
+                className="staff-btn-accept"
+                onClick={handleConfirmManualSelection}
+                disabled={confirmingManual || !manualChecklistId}
+              >
+                {confirmingManual ? "Confirming..." : "✓ Confirm & Complete"}
+              </button>
+              <button
+                type="button"
+                className="staff-btn-reject"
+                onClick={() => {
+                  setManualSelection(null);
+                  setManualChecklistId("");
+                }}
+                disabled={confirmingManual}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* AI SUGGESTIONS SECTION */}
       {suggestions.length > 0 && (
         <section className="staff-details-suggestions-card">
@@ -381,26 +509,64 @@ export default function StaffClientDetails() {
                     )}
                   </div>
 
-                  {sugg.status === "pending" && (
-                    <div className="staff-suggestion-actions">
-                      <button
-                        type="button"
-                        className="staff-btn-accept"
-                        onClick={() => handleDecideSuggestion(suggId, "accepted")}
-                        disabled={decidingId === suggId}
-                      >
-                        {decidingId === suggId ? "Processing..." : "✓ Accept Suggestion"}
-                      </button>
-                      <button
-                        type="button"
-                        className="staff-btn-reject"
-                        onClick={() => handleDecideSuggestion(suggId, "rejected")}
-                        disabled={decidingId === suggId}
-                      >
-                        {decidingId === suggId ? "Processing..." : "✕ Reject"}
-                      </button>
-                    </div>
-                  )}
+                  {sugg.status === "pending" && (() => {
+                    const defaultMatchedId =
+                      sugg.matched_checklist_item_id?._id ||
+                      sugg.matched_checklist_item_id ||
+                      "";
+                    const selectedItemId =
+                      selectedChecklistBySuggestion[suggId] ?? defaultMatchedId;
+
+                    return (
+                      <div className="staff-suggestion-pending-controls">
+                        <div className="staff-suggestion-select-row">
+                          <label htmlFor={`sugg-select-${suggId}`} className="staff-suggestion-select-label">
+                            Checklist item to complete:
+                          </label>
+                          <select
+                            id={`sugg-select-${suggId}`}
+                            className="staff-suggestion-select"
+                            value={selectedItemId}
+                            onChange={(e) =>
+                              setSelectedChecklistBySuggestion((prev) => ({
+                                ...prev,
+                                [suggId]: e.target.value
+                              }))
+                            }
+                            disabled={decidingId === suggId || openChecklistItems.length === 0}
+                          >
+                            <option value="">-- Select checklist item --</option>
+                            {openChecklistItems.map((item) => {
+                              const itemId = item._id || item.id;
+                              return (
+                                <option key={itemId} value={itemId}>
+                                  {item.name}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+                        <div className="staff-suggestion-actions">
+                          <button
+                            type="button"
+                            className="staff-btn-accept"
+                            onClick={() => handleDecideSuggestion(sugg, "accepted")}
+                            disabled={decidingId === suggId || !selectedItemId || openChecklistItems.length === 0}
+                          >
+                            {decidingId === suggId ? "Processing..." : "✓ Confirm & Complete"}
+                          </button>
+                          <button
+                            type="button"
+                            className="staff-btn-reject"
+                            onClick={() => handleDecideSuggestion(sugg, "rejected")}
+                            disabled={decidingId === suggId}
+                          >
+                            {decidingId === suggId ? "Processing..." : "✕ Reject"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}

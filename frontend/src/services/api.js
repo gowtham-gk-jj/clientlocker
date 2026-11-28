@@ -313,7 +313,11 @@ export const getAISuggestions = async (clientId) => {
   });
 };
 
-export const decideAISuggestion = async (suggestionId, status) => {
+export const decideAISuggestion = async (
+  suggestionId,
+  status,
+  checklistItemId = null
+) => {
   if (!suggestionId) {
     throw new Error("Suggestion ID is missing.");
   }
@@ -322,9 +326,32 @@ export const decideAISuggestion = async (suggestionId, status) => {
     throw new Error("Status must be accepted or rejected.");
   }
 
+  const payload = { status };
+  if (checklistItemId) {
+    payload.checklist_item_id = checklistItemId;
+  }
+
   return apiRequest(`/api/ai-checklist-suggestions/${suggestionId}`, {
     method: "PATCH",
-    body: JSON.stringify({ status })
+    body: JSON.stringify(payload)
+  });
+};
+
+export const confirmFileChecklist = async (
+  fileId,
+  { checklistItemId = null, suggestionId = null, status = "accepted" } = {}
+) => {
+  if (!fileId) {
+    throw new Error("File ID is missing.");
+  }
+
+  return apiRequest(`/api/files/${fileId}/confirm`, {
+    method: "POST",
+    body: JSON.stringify({
+      status,
+      ...(checklistItemId ? { checklist_item_id: checklistItemId } : {}),
+      ...(suggestionId ? { suggestion_id: suggestionId } : {})
+    })
   });
 };
 

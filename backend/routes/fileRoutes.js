@@ -31,6 +31,14 @@ const {
   downloadFile
 } = require("../controllers/downloadController");
 
+const {
+  suggestForFile
+} = require("../controllers/aiChecklistController");
+
+const {
+  confirmFileSuggestion
+} = require("../controllers/checklistController");
+
 // ==========================================
 // TASK 3: LIST CLIENT FILES
 // ==========================================
@@ -94,6 +102,24 @@ router.get(
   "/links/:token",
   protect,
   downloadFile
+);
+
+// ==========================================
+// AI CHECKLIST SUGGEST & CONFIRM BY FILE ID
+// ==========================================
+
+router.post(
+  "/files/:id/suggest",
+  protect,
+  authorize("partner", "staff"),
+  suggestForFile
+);
+
+router.post(
+  "/files/:id/confirm",
+  protect,
+  authorize("partner", "staff"),
+  confirmFileSuggestion
 );
 
 // ==========================================

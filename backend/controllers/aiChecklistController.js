@@ -315,3 +315,35 @@ exports.generateChecklistSuggestions = async (req, res, next) => {
     next(error);
   }
 };
+
+// ======================================
+// SUGGEST CHECKLIST BY FILE ID (ALIAS)
+// POST /api/files/:id/suggest
+// ======================================
+
+exports.suggestForFile = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid file ID."
+      });
+    }
+
+    const file = await StoredFile.findById(id).select("_id client_id");
+    if (!file) {
+      return res.status(404).json({
+        success: false,
+        message: "Client file not found."
+      });
+    }
+
+    req.params.clientId = String(file.client_id);
+    req.params.fileId = String(file._id);
+    return exports.generateChecklistSuggestions(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+};

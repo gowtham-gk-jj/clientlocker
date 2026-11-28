@@ -1,5 +1,23 @@
 const axios = require("axios");
 
+const RETRYABLE_STATUSES = new Set([429, 502, 503]);
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function postWithRetry(requestUrl, payload, config) {
+  try {
+    return await axios.post(requestUrl, payload, config);
+  } catch (error) {
+    if (RETRYABLE_STATUSES.has(error.response?.status)) {
+      await delay(1500);
+      return axios.post(requestUrl, payload, config);
+    }
+    throw error;
+  }
+}
+
 class AIServiceError extends Error {
   constructor(message, code = "AI_SERVICE_ERROR", status = 500) {
     super(message);
@@ -85,7 +103,7 @@ async function suggestChecklist({
   };
 
   try {
-    const response = await axios.post(
+    const response = await postWithRetry(
       `${url}/api/v1/checklist/suggest`,
       payload,
       {
